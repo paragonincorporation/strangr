@@ -200,6 +200,83 @@ export declare const matchModeSchema: z.ZodEnum<{
     text: "text";
     video: "video";
 }>;
+export declare const blockReasonSchema: z.ZodEnum<{
+    safety: "safety";
+    harassment: "harassment";
+    spam: "spam";
+    other: "other";
+}>;
+export declare const blockCreateRequestSchema: z.ZodObject<{
+    userId: z.ZodUUID;
+    reasonCategory: z.ZodEnum<{
+        safety: "safety";
+        harassment: "harassment";
+        spam: "spam";
+        other: "other";
+    }>;
+}, z.core.$strip>;
+export declare const friendRequestCreateSchema: z.ZodObject<{
+    userId: z.ZodUUID;
+    encounterId: z.ZodUUID;
+}, z.core.$strip>;
+export declare const friendRequestActionSchema: z.ZodObject<{
+    action: z.ZodEnum<{
+        accept: "accept";
+        reject: "reject";
+        cancel: "cancel";
+    }>;
+}, z.core.$strip>;
+export declare const muteRequestSchema: z.ZodObject<{
+    scope: z.ZodDefault<z.ZodEnum<{
+        all: "all";
+        messages: "messages";
+        calls: "calls";
+    }>>;
+    expiresAt: z.ZodOptional<z.ZodISODateTime>;
+}, z.core.$strip>;
+export declare const encounterSchema: z.ZodObject<{
+    id: z.ZodUUID;
+    mode: z.ZodEnum<{
+        text: "text";
+        video: "video";
+    }>;
+    startedAt: z.ZodISODateTime;
+    endedAt: z.ZodNullable<z.ZodISODateTime>;
+    otherUser: z.ZodObject<{
+        id: z.ZodUUID;
+        username: z.ZodString;
+        displayName: z.ZodString;
+        avatarAvailable: z.ZodBoolean;
+    }, z.core.$strip>;
+    friendshipState: z.ZodLiteral<"none">;
+    requestState: z.ZodLiteral<"none">;
+    hidden: z.ZodBoolean;
+    reported: z.ZodBoolean;
+    blocked: z.ZodBoolean;
+}, z.core.$strip>;
+export declare const encounterListResponseSchema: z.ZodObject<{
+    items: z.ZodArray<z.ZodObject<{
+        id: z.ZodUUID;
+        mode: z.ZodEnum<{
+            text: "text";
+            video: "video";
+        }>;
+        startedAt: z.ZodISODateTime;
+        endedAt: z.ZodNullable<z.ZodISODateTime>;
+        otherUser: z.ZodObject<{
+            id: z.ZodUUID;
+            username: z.ZodString;
+            displayName: z.ZodString;
+            avatarAvailable: z.ZodBoolean;
+        }, z.core.$strip>;
+        friendshipState: z.ZodLiteral<"none">;
+        requestState: z.ZodLiteral<"none">;
+        hidden: z.ZodBoolean;
+        reported: z.ZodBoolean;
+        blocked: z.ZodBoolean;
+    }, z.core.$strip>>;
+    nextCursor: z.ZodNullable<z.ZodString>;
+}, z.core.$strip>;
 export declare const matchJoinRequestSchema: z.ZodObject<{
     mode: z.ZodEnum<{
         text: "text";
@@ -379,6 +456,14 @@ export declare const clientRealtimeEnvelopeSchema: z.ZodDiscriminatedUnion<[z.Zo
 }, z.core.$strip>], "type">;
 export declare const serverRealtimeEnvelopeSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
     version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"presence.changed">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        userId: z.ZodUUID;
+        online: z.ZodBoolean;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
     type: z.ZodLiteral<"connection.ready">;
     requestId: z.ZodString;
     payload: z.ZodObject<{
@@ -460,12 +545,12 @@ export declare const serverRealtimeEnvelopeSchema: z.ZodDiscriminatedUnion<[z.Zo
     payload: z.ZodObject<{
         matchId: z.ZodUUID;
         reason: z.ZodEnum<{
+            blocked: "blocked";
             left: "left";
             next: "next";
             peer_left: "peer_left";
             ack_timeout: "ack_timeout";
             disconnected: "disconnected";
-            blocked: "blocked";
         }>;
     }, z.core.$strip>;
 }, z.core.$strip>, z.ZodObject<{

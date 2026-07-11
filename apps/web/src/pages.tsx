@@ -31,7 +31,9 @@ export function LandingPage() {
             MEET A<br />
             <em>STRANGR.</em>
           </h1>
-          <p className="hero-lede">One tap to meet. Mutual consent to stay connected.</p>
+          <p className="hero-lede">
+            One tap to meet. Mutual consent to stay connected.
+          </p>
           <div className="hero-actions">
             <Link className="hero-primary" to="/auth/sign-in">
               Create your account <b>↗</b>
@@ -126,10 +128,15 @@ export function AuthPage() {
         if (error) throw error
         setMessage('Check your email to verify your account.')
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
         if (error) throw error
         const target = params.get('returnTo')
-        void navigate(target?.startsWith('/') && !target.startsWith('//') ? target : '/app')
+        void navigate(
+          target?.startsWith('/') && !target.startsWith('//') ? target : '/app',
+        )
       }
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Authentication failed')
@@ -152,7 +159,9 @@ export function AuthPage() {
       <Card className="auth-card">
         <p className="eyebrow">YOUR ACCOUNT</p>
         <h1>Come meet someone new.</h1>
-        <p className="muted">Verified accounts keep matching and contact revocable.</p>
+        <p className="muted">
+          Verified accounts keep matching and contact revocable.
+        </p>
         <form onSubmit={(event) => void submit(event)}>
           <Input
             autoComplete="email"
@@ -186,7 +195,10 @@ export function AuthPage() {
           </Button>
         </form>
         {message ? <p role="status">{message}</p> : null}
-        <Button onClick={() => setMode(mode === 'sign_in' ? 'sign_up' : 'sign_in')} variant="quiet">
+        <Button
+          onClick={() => setMode(mode === 'sign_in' ? 'sign_up' : 'sign_in')}
+          variant="quiet"
+        >
           {mode === 'sign_in' ? 'Create an account' : 'Back to sign in'}
         </Button>
         <Button onClick={() => setMode('reset')} variant="quiet">
@@ -234,7 +246,12 @@ export function OnboardingPage() {
       })
       await api('/v1/me/onboarding', {
         method: 'POST',
-        body: JSON.stringify({ step: 'profile', username, displayName, isPrivate }),
+        body: JSON.stringify({
+          step: 'profile',
+          username,
+          displayName,
+          isPrivate,
+        }),
       })
       await api('/v1/me/onboarding', {
         method: 'POST',
@@ -267,7 +284,8 @@ export function OnboardingPage() {
         <p className="eyebrow">ONE-TIME SETUP</p>
         <h1>Identity without forced exposure.</h1>
         <p className="muted">
-          Your exact birthday stays encrypted and private. The server derives your matching cohort.
+          Your exact birthday stays encrypted and private. The server derives
+          your matching cohort.
         </p>
         <form onSubmit={(event) => void submit(event)}>
           <Input
@@ -300,7 +318,11 @@ export function OnboardingPage() {
             <option value="public">Public</option>
           </Select>
           <label>
-            <input checked={accept} onChange={(e) => setAccept(e.target.checked)} type="checkbox" />{' '}
+            <input
+              checked={accept}
+              onChange={(e) => setAccept(e.target.checked)}
+              type="checkbox"
+            />{' '}
             I accept the Terms and Community Guidelines.
           </label>
           <Button disabled={!accept || busy} fullWidth type="submit">
@@ -354,10 +376,13 @@ export function ProfilePage() {
     if (!file) return
     setBusy(true)
     try {
-      const init = await api<{ uploadId: string; uploadUrl: string }>('/v1/me/avatar-uploads', {
-        method: 'POST',
-        body: JSON.stringify({ byteSize: file.size, contentType: file.type }),
-      })
+      const init = await api<{ uploadId: string; uploadUrl: string }>(
+        '/v1/me/avatar-uploads',
+        {
+          method: 'POST',
+          body: JSON.stringify({ byteSize: file.size, contentType: file.type }),
+        },
+      )
       await api(init.uploadUrl, {
         method: 'PUT',
         body: file,
@@ -453,8 +478,9 @@ export function SettingsPage() {
       <Card>
         <h2>Privacy and sessions</h2>
         <p>
-          Discoverability, encounter requests, presence, recent activity, accessibility, and history
-          are initialized with onboarding and enforced by the API.
+          Discoverability, encounter requests, presence, recent activity,
+          accessibility, and history are initialized with onboarding and
+          enforced by the API.
         </p>
         <Button onClick={() => void signOut()} variant="secondary">
           Sign out
@@ -467,7 +493,11 @@ export function SettingsPage() {
             <li key={item.id}>
               {item.deviceLabel ?? 'Unknown browser'} ·{' '}
               {new Date(item.lastSeenAt).toLocaleDateString()}{' '}
-              <Button onClick={() => void revoke(item.id)} size="small" variant="danger">
+              <Button
+                onClick={() => void revoke(item.id)}
+                size="small"
+                variant="danger"
+              >
                 Revoke
               </Button>
             </li>
@@ -493,7 +523,9 @@ export function HomePage() {
         <Card className="mode-card mode-card--video">
           <Badge>VIDEO</Badge>
           <h2>Face to face.</h2>
-          <p>Camera and microphone are requested only after you choose video.</p>
+          <p>
+            Camera and microphone are requested only after you choose video.
+          </p>
           <Link to="/conversation/video">
             Start video matching <span>↗</span>
           </Link>
@@ -519,8 +551,8 @@ export function HomePage() {
           <p className="eyebrow">QUICK SAFETY</p>
           <h2>You’re always in control.</h2>
           <p>
-            Report keeps the conversation open unless you choose to leave. Block ends contact
-            immediately.
+            Report keeps the conversation open unless you choose to leave. Block
+            ends contact immediately.
           </p>
           <Button variant="secondary">Review community rules</Button>
         </Card>
@@ -552,18 +584,334 @@ export function PlaceholderPage({
   )
 }
 
+type EncounterItem = {
+  id: string
+  mode: 'text' | 'video'
+  startedAt: string
+  otherUser: {
+    id: string
+    username: string
+    displayName: string
+    avatarAvailable: boolean
+  }
+}
+export function HistoryPage() {
+  const [items, setItems] = useState<EncounterItem[]>([])
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>(
+    supabase ? 'loading' : 'ready',
+  )
+  useEffect(() => {
+    if (!supabase) return
+    void api<{ items: EncounterItem[] }>('/v1/encounters?window=48h')
+      .then((result) => {
+        setItems(result.items)
+        setState('ready')
+      })
+      .catch(() => setState('error'))
+  }, [])
+  if (state === 'loading') return <RouteState kind="loading" />
+  if (state === 'error') return <RouteState kind="error" />
+  return (
+    <div className="page-stack">
+      <header className="page-heading">
+        <div>
+          <p className="eyebrow">RECENT ENCOUNTERS</p>
+          <h1>History</h1>
+          <p>
+            Visible for up to 48 hours. A block hides the encounter immediately.
+          </p>
+        </div>
+      </header>
+      {items.length === 0 ? (
+        <RouteState kind="empty" />
+      ) : (
+        <section className="card-grid">
+          {items.map((item) => (
+            <Card key={item.id}>
+              <Avatar name={item.otherUser.displayName} />
+              <h2>{item.otherUser.displayName}</h2>
+              <p>
+                @{item.otherUser.username} · {item.mode} ·{' '}
+                {new Intl.DateTimeFormat(undefined, {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                }).format(new Date(item.startedAt))}
+              </p>
+              <div className="button-row">
+                <Button
+                  onClick={() =>
+                    void api('/v1/friend-requests', {
+                      method: 'POST',
+                      body: JSON.stringify({
+                        userId: item.otherUser.id,
+                        encounterId: item.id,
+                      }),
+                    }).then(() =>
+                      setItems((current) =>
+                        current.filter((x) => x.id !== item.id),
+                      ),
+                    )
+                  }
+                  variant="secondary"
+                >
+                  Add friend
+                </Button>
+                <Link
+                  to={`/app/people/${encodeURIComponent(item.otherUser.username)}`}
+                >
+                  View profile
+                </Link>
+                <Button
+                  variant="quiet"
+                  onClick={() =>
+                    void api(`/v1/encounters/${item.id}/view`, {
+                      method: 'DELETE',
+                    }).then(() =>
+                      setItems((current) =>
+                        current.filter((x) => x.id !== item.id),
+                      ),
+                    )
+                  }
+                >
+                  Hide
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() =>
+                    void api('/v1/blocks', {
+                      method: 'POST',
+                      body: JSON.stringify({
+                        userId: item.otherUser.id,
+                        reasonCategory: 'safety',
+                      }),
+                    }).then(() =>
+                      setItems((current) =>
+                        current.filter((x) => x.id !== item.id),
+                      ),
+                    )
+                  }
+                >
+                  Block
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </section>
+      )}
+    </div>
+  )
+}
+
+type FriendItem = {
+  id: string
+  user: { id: string; username: string; displayName: string }
+  presence: 'online' | 'hidden'
+}
+type RequestItem = {
+  id: string
+  userId: string
+  username: string
+  displayName: string
+  expiresAt: string
+}
+export function FriendsPage() {
+  const navigate = useNavigate()
+  const [lookup, setLookup] = useState('')
+  const [friends, setFriends] = useState<FriendItem[]>([])
+  const [requests, setRequests] = useState<RequestItem[]>([])
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>(
+    supabase ? 'loading' : 'ready',
+  )
+  const load = async () => {
+    const [friendResult, requestResult] = await Promise.all([
+      api<{ items: FriendItem[] }>('/v1/friends'),
+      api<{ items: RequestItem[] }>('/v1/friend-requests'),
+    ])
+    setFriends(friendResult.items)
+    setRequests(requestResult.items)
+    setState('ready')
+  }
+  useEffect(() => {
+    if (supabase) {
+      void Promise.resolve()
+        .then(load)
+        .catch(() => setState('error'))
+      const timer = window.setInterval(
+        () => void load().catch(() => undefined),
+        30_000,
+      )
+      return () => window.clearInterval(timer)
+    }
+    return undefined
+  }, [])
+  const act = (id: string, action: 'accept' | 'reject') =>
+    void api(`/v1/friend-requests/${id}/actions`, {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    }).then(load)
+  if (state === 'loading') return <RouteState kind="loading" />
+  if (state === 'error') return <RouteState kind="error" />
+  return (
+    <div className="page-stack">
+      <header className="page-heading">
+        <div>
+          <p className="eyebrow">SOCIAL CIRCLE</p>
+          <h1>Friends</h1>
+          <p>
+            Requests require mutual consent. Presence is shown only when a
+            friend permits it.
+          </p>
+        </div>
+      </header>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          const exact = lookup.trim()
+          if (/^[A-Za-z0-9_]{3,30}$/.test(exact))
+            void navigate(`/app/people/${encodeURIComponent(exact)}`)
+        }}
+      >
+        <Input
+          label="Find exact username"
+          value={lookup}
+          onChange={(event) => setLookup(event.target.value)}
+          maxLength={30}
+        />
+        <Button type="submit">View profile</Button>
+      </form>
+      <section>
+        <h2>Requests {requests.length ? `(${requests.length})` : ''}</h2>
+        {requests.length === 0 ? (
+          <p>No incoming requests.</p>
+        ) : (
+          requests.map((request) => (
+            <Card key={request.id}>
+              <h3>{request.displayName}</h3>
+              <p>@{request.username}</p>
+              <div className="button-row">
+                <Button onClick={() => act(request.id, 'accept')}>
+                  Accept
+                </Button>
+                <Button
+                  variant="quiet"
+                  onClick={() => act(request.id, 'reject')}
+                >
+                  Reject
+                </Button>
+              </div>
+            </Card>
+          ))
+        )}
+      </section>
+      <section>
+        <h2>Your friends</h2>
+        {friends.length === 0 ? (
+          <RouteState kind="empty" />
+        ) : (
+          <div className="card-grid">
+            {friends.map((friend) => (
+              <Card key={friend.id}>
+                <Avatar
+                  name={friend.user.displayName}
+                  {...(friend.presence === 'online'
+                    ? { status: 'online' as const }
+                    : {})}
+                />
+                <h3>{friend.user.displayName}</h3>
+                <p>
+                  @{friend.user.username} ·{' '}
+                  {friend.presence === 'online' ? 'Online' : 'Presence hidden'}
+                </p>
+                <div className="button-row">
+                  <Link
+                    to={`/app/people/${encodeURIComponent(friend.user.username)}`}
+                  >
+                    Profile
+                  </Link>
+                  <Button
+                    variant="quiet"
+                    onClick={() =>
+                      void api(`/v1/mutes/${friend.user.id}`, {
+                        method: 'PUT',
+                        body: JSON.stringify({ scope: 'all' }),
+                      })
+                    }
+                  >
+                    Mute
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={() =>
+                      void api(`/v1/friends/${friend.id}`, {
+                        method: 'DELETE',
+                      }).then(load)
+                    }
+                  >
+                    Unfriend
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+export function OtherProfilePage() {
+  const { username = '' } = useParams()
+  const validUsername = /^[A-Za-z0-9_]{3,30}$/.test(username)
+  const [profile, setProfile] = useState<{
+    username: string
+    displayName: string
+    bio: string
+    interests: string[]
+    isPrivate: boolean
+  }>()
+  const [error, setError] = useState(false)
+  useEffect(() => {
+    if (supabase && validUsername)
+      void api<typeof profile>(`/v1/profiles/${encodeURIComponent(username)}`)
+        .then(setProfile)
+        .catch(() => setError(true))
+  }, [username, validUsername])
+  if (error || !validUsername) return <RouteState kind="forbidden" />
+  if (!profile) return <RouteState kind="loading" />
+  return (
+    <div className="page-stack">
+      <Card>
+        <Avatar name={profile.displayName} />
+        <p className="eyebrow">
+          {profile.isPrivate ? 'PRIVATE PROFILE' : 'PROFILE'}
+        </p>
+        <h1>{profile.displayName}</h1>
+        <p>@{profile.username}</p>
+        {profile.bio && <p>{profile.bio}</p>}
+        <p>{profile.interests.join(' · ')}</p>
+      </Card>
+    </div>
+  )
+}
+
 export function ConversationPage() {
   const { mode: routeMode } = useParams()
   const [searchParams] = useSearchParams()
   const permissionDenied = searchParams.get('permission') === 'denied'
   const call = useCallUi()
-  const mode = permissionDenied || routeMode === 'text' || call.mode === 'text' ? 'text' : 'video'
+  const mode =
+    permissionDenied || routeMode === 'text' || call.mode === 'text'
+      ? 'text'
+      : 'video'
   const [reportOpen, setReportOpen] = useState(false)
   const [blockOpen, setBlockOpen] = useState(false)
   const [toast, setToast] = useState<string>()
   const [matchId, setMatchId] = useState<string>()
+  const [peerId, setPeerId] = useState<string>()
   const matchIdRef = useRef<string | undefined>(undefined)
-  const [messages, setMessages] = useState<Array<{ id: string; text: string; mine: boolean }>>([])
+  const [messages, setMessages] = useState<
+    Array<{ id: string; text: string; mine: boolean }>
+  >([])
   const [draft, setDraft] = useState('')
   const [permissionError, setPermissionError] = useState(permissionDenied)
   const localVideo = useRef<HTMLVideoElement>(null)
@@ -580,9 +928,11 @@ export function ConversationPage() {
           const id = String(event.payload.matchId)
           matchIdRef.current = id
           setMatchId(id)
+          setPeerId(String(event.payload.peerId))
           call.setStatus('connecting')
           client.send('match.ack', { matchId: id })
-          if (event.payload.initiator === true && mode === 'video') void createOffer(id)
+          if (event.payload.initiator === true && mode === 'video')
+            void createOffer(id)
         } else if (event.type === 'match.connected') call.setStatus('connected')
         else if (event.type === 'match.ended') {
           teardown()
@@ -591,7 +941,11 @@ export function ConversationPage() {
         } else if (event.type === 'chat.message')
           setMessages((items) => [
             ...items,
-            { id: String(event.payload.sequence), text: String(event.payload.text), mine: false },
+            {
+              id: String(event.payload.sequence),
+              text: String(event.payload.text),
+              mine: false,
+            },
           ])
         else if (
           event.type === 'rtc.offer' ||
@@ -621,7 +975,9 @@ export function ConversationPage() {
       })
     }
     void start().catch((error) =>
-      setToast(error instanceof Error ? error.message : 'Could not start matching'),
+      setToast(
+        error instanceof Error ? error.message : 'Could not start matching',
+      ),
     )
     return () => {
       active = false
@@ -634,15 +990,21 @@ export function ConversationPage() {
 
   async function ensurePeer() {
     if (peer.current) return peer.current
-    const credentials = await api<{ iceServers: RTCIceServer[] }>('/v1/rtc/credentials', {
-      method: 'POST',
+    const credentials = await api<{ iceServers: RTCIceServer[] }>(
+      '/v1/rtc/credentials',
+      {
+        method: 'POST',
+      },
+    )
+    const connection = new RTCPeerConnection({
+      iceServers: credentials.iceServers,
     })
-    const connection = new RTCPeerConnection({ iceServers: credentials.iceServers })
     media.current.stream
       ?.getTracks()
       .forEach((track) => connection.addTrack(track, media.current.stream!))
     connection.ontrack = (event) => {
-      if (remoteVideo.current) remoteVideo.current.srcObject = event.streams[0] ?? null
+      if (remoteVideo.current)
+        remoteVideo.current.srcObject = event.streams[0] ?? null
     }
     connection.onicecandidate = (event) => {
       const id = matchIdRef.current
@@ -657,7 +1019,10 @@ export function ConversationPage() {
     peer.current = connection
     return connection
   }
-  async function receiveRtc(event: { type: string; payload: Record<string, unknown> }) {
+  async function receiveRtc(event: {
+    type: string
+    payload: Record<string, unknown>
+  }) {
     const connection = await ensurePeer()
     if (event.type === 'rtc.ice')
       await connection.addIceCandidate({
@@ -700,7 +1065,11 @@ export function ConversationPage() {
     event.preventDefault()
     if (!matchId || !draft.trim()) return
     const id = crypto.randomUUID()
-    realtime.current?.send('chat.send', { matchId, clientMessageId: id, text: draft })
+    realtime.current?.send('chat.send', {
+      matchId,
+      clientMessageId: id,
+      text: draft,
+    })
     setMessages((items) => [...items, { id, text: draft, mine: true }])
     setDraft('')
   }
@@ -720,7 +1089,9 @@ export function ConversationPage() {
 
   return (
     <main
-      className={call.chatOpen ? 'call-shell' : 'call-shell call-shell--chat-closed'}
+      className={
+        call.chatOpen ? 'call-shell' : 'call-shell call-shell--chat-closed'
+      }
       id="main-content"
     >
       <header className="call-header">
@@ -744,14 +1115,24 @@ export function ConversationPage() {
           </Button>
         </Card>
       ) : null}
-      <section className="call-stage" aria-label={`${mode} conversation preview`}>
+      <section
+        className="call-stage"
+        aria-label={`${mode} conversation preview`}
+      >
         <div className="remote-tile">
           {mode === 'video' ? (
-            <video autoPlay className="call-video" playsInline ref={remoteVideo} />
+            <video
+              autoPlay
+              className="call-video"
+              playsInline
+              ref={remoteVideo}
+            />
           ) : null}
           <div className="remote-empty">
             <span>?</span>
-            <strong>{mode === 'text' ? 'TEXT MODE' : 'CONNECTING STRANGER'}</strong>
+            <strong>
+              {mode === 'text' ? 'TEXT MODE' : 'CONNECTING STRANGER'}
+            </strong>
           </div>
           <div className="tile-label">
             <span>STRANGR</span>
@@ -759,10 +1140,14 @@ export function ConversationPage() {
           </div>
         </div>
         <div className="local-tile">
-          {mode === 'video' ? <video autoPlay muted playsInline ref={localVideo} /> : null}
+          {mode === 'video' ? (
+            <video autoPlay muted playsInline ref={localVideo} />
+          ) : null}
           <div>
             <span>YOU</span>
-            <small>{call.videoEnabled && mode === 'video' ? 'PREVIEW' : 'CAM OFF'}</small>
+            <small>
+              {call.videoEnabled && mode === 'video' ? 'PREVIEW' : 'CAM OFF'}
+            </small>
           </div>
         </div>
         <div className="call-identity">
@@ -788,7 +1173,10 @@ export function ConversationPage() {
             Messages will stay plain text and expire with random-chat retention.
           </p>
           {messages.map((message) => (
-            <p className={message.mine ? 'message message--mine' : 'message'} key={message.id}>
+            <p
+              className={message.mine ? 'message message--mine' : 'message'}
+              key={message.id}
+            >
               {message.text}
             </p>
           ))}
@@ -810,7 +1198,11 @@ export function ConversationPage() {
         </form>
       </aside>
       <nav aria-label="Conversation controls" className="call-dock">
-        <button aria-pressed={!call.audioEnabled} onClick={call.toggleAudio} type="button">
+        <button
+          aria-pressed={!call.audioEnabled}
+          onClick={call.toggleAudio}
+          type="button"
+        >
           <span>MIC</span>
           <b>{call.audioEnabled ? 'ON' : 'OFF'}</b>
         </button>
@@ -836,15 +1228,27 @@ export function ConversationPage() {
           <span>NEXT</span>
           <b>↗</b>
         </button>
-        <button aria-expanded={call.chatOpen} onClick={call.toggleChat} type="button">
+        <button
+          aria-expanded={call.chatOpen}
+          onClick={call.toggleChat}
+          type="button"
+        >
           <span>TEXT</span>
           <b>{call.chatOpen ? 'OPEN' : 'CLOSED'}</b>
         </button>
-        <button aria-label="Report conversation" onClick={() => setReportOpen(true)} type="button">
+        <button
+          aria-label="Report conversation"
+          onClick={() => setReportOpen(true)}
+          type="button"
+        >
           <span>FLAG</span>
           <b>REPORT</b>
         </button>
-        <button aria-label="Block and end contact" onClick={() => setBlockOpen(true)} type="button">
+        <button
+          aria-label="Block and end contact"
+          onClick={() => setBlockOpen(true)}
+          type="button"
+        >
           <span>BLOCK</span>
           <b>END CONTACT</b>
         </button>
@@ -901,9 +1305,23 @@ export function ConversationPage() {
             <Button
               onClick={() => {
                 setBlockOpen(false)
-                if (matchId) realtime.current?.send('match.leave', { matchId })
-                teardown()
-                setToast('Contact ended. Persistent block enforcement arrives in Unit 13.')
+                if (!peerId) return
+                void api('/v1/blocks', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    userId: peerId,
+                    reasonCategory: 'safety',
+                  }),
+                })
+                  .then(() => {
+                    teardown()
+                    setToast(
+                      'Blocked. Contact ended and future contact is unavailable.',
+                    )
+                  })
+                  .catch(() =>
+                    setToast('Block could not be completed. Try again.'),
+                  )
               }}
               variant="danger"
             >

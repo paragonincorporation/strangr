@@ -15,6 +15,20 @@
       "when": 1783828800000,
       "tag": "0002_auth_profiles_avatars",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783832400000,
+      "tag": "0003_encounters_blocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783836000000,
+      "tag": "0004_friends_presence",
+      "breakpoints": true
     }
   ]
 }

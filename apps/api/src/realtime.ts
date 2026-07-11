@@ -21,9 +21,16 @@ export interface MatchRecord {
 export class RedisRealtimeStore {
   readonly client: RedisClientType
   private readonly prefix: string
+  private blockChecker:
+    ((first: string, second: string) => Promise<boolean>) | undefined
   constructor(url: string, namespace = 'strangr') {
     this.client = createClient({ url })
     this.prefix = namespace
+  }
+  setBlockChecker(
+    checker: (first: string, second: string) => Promise<boolean>,
+  ) {
+    this.blockChecker = checker
   }
   private key(...parts: string[]) {
     return [this.prefix, ...parts].join(':')
@@ -49,38 +56,72 @@ export class RedisRealtimeStore {
   }
   async consumeTicket(ticket: string): Promise<TicketRecord | null> {
     if (ticket.length < 32 || ticket.length > 256) return null
-    const value = await this.client.sendCommand(['GETDEL', this.key('ticket', hash(ticket))])
+    const value = await this.client.sendCommand([
+      'GETDEL',
+      this.key('ticket', hash(ticket)),
+    ])
     if (typeof value !== 'string') return null
     return JSON.parse(value) as TicketRecord
   }
-  async bindConnection(identity: RealtimeIdentity, connectionId: string, ttlSeconds = 45) {
-    await this.client.set(this.key('connection', connectionId), JSON.stringify(identity), {
-      EX: ttlSeconds,
-    })
-    await this.client.sAdd(this.key('user-connections', identity.userId), connectionId)
-    await this.client.expire(this.key('user-connections', identity.userId), ttlSeconds)
+  async bindConnection(
+    identity: RealtimeIdentity,
+    connectionId: string,
+    ttlSeconds = 45,
+  ) {
+    await this.client.set(
+      this.key('connection', connectionId),
+      JSON.stringify(identity),
+      {
+        EX: ttlSeconds,
+      },
+    )
+    await this.client.sAdd(
+      this.key('user-connections', identity.userId),
+      connectionId,
+    )
+    await this.client.expire(
+      this.key('user-connections', identity.userId),
+      ttlSeconds,
+    )
   }
-  async renewConnection(identity: RealtimeIdentity, connectionId: string, ttlSeconds = 45) {
+  async renewConnection(
+    identity: RealtimeIdentity,
+    connectionId: string,
+    ttlSeconds = 45,
+  ) {
     await this.bindConnection(identity, connectionId, ttlSeconds)
   }
   async unbindConnection(identity: RealtimeIdentity, connectionId: string) {
     await Promise.all([
       this.client.del(this.key('connection', connectionId)),
-      this.client.sRem(this.key('user-connections', identity.userId), connectionId),
+      this.client.sRem(
+        this.key('user-connections', identity.userId),
+        connectionId,
+      ),
     ])
   }
+  async isUserOnline(userId: string) {
+    return (await this.client.sCard(this.key('user-connections', userId))) > 0
+  }
   async isSessionRevoked(sessionId: string) {
-    return (await this.client.exists(this.key('revoked-session', sessionId))) === 1
+    return (
+      (await this.client.exists(this.key('revoked-session', sessionId))) === 1
+    )
   }
   async revokeSession(sessionId: string) {
-    await this.client.set(this.key('revoked-session', sessionId), '1', { EX: 86_400 })
+    await this.client.set(this.key('revoked-session', sessionId), '1', {
+      EX: 86_400,
+    })
     await this.client.publish(this.key('session-revoked'), sessionId)
   }
   async rateLimit(scope: string, limit: number, windowSeconds: number) {
     const key = this.key('limit', scope)
     const count = await this.client.incr(key)
     if (count === 1) await this.client.expire(key, windowSeconds)
-    return { allowed: count <= limit, retryAfterMs: await this.client.pTTL(key) }
+    return {
+      allowed: count <= limit,
+      retryAfterMs: await this.client.pTTL(key),
+    }
   }
   async joinQueue(
     identity: RealtimeIdentity,
@@ -93,6 +134,16 @@ export class RedisRealtimeStore {
     const entryKey = this.key('queue-entry', identity.userId)
     const matchId = randomUUID()
     const expiresAt = new Date(Date.now() + 20_000).toISOString()
+    if (this.blockChecker) {
+      const candidates = await this.client.zRange(queueKey, 0, 24)
+      for (const candidate of candidates)
+        if (await this.blockChecker(identity.userId, candidate))
+          await this.client.set(
+            this.key('deny', identity.userId, candidate),
+            '1',
+            { EX: 120 },
+          )
+    }
     const result = (await this.client.eval(
       `if redis.call('EXISTS', KEYS[1]) == 1 then return {'busy'} end
        local candidates=redis.call('ZRANGE',KEYS[2],0,24)
@@ -133,7 +184,13 @@ export class RedisRealtimeStore {
       queuedAt,
       match:
         result[0] === 'matched' && result[1]
-          ? { id: matchId, mode, first: result[1], second: identity.userId, expiresAt }
+          ? {
+              id: matchId,
+              mode,
+              first: result[1],
+              second: identity.userId,
+              expiresAt,
+            }
           : null,
     }
   }
@@ -143,23 +200,54 @@ export class RedisRealtimeStore {
   }
   async acknowledge(matchId: string, userId: string) {
     const match = await this.getMatch(matchId)
-    if (!match || (match.first !== userId && match.second !== userId)) return false
+    if (!match || (match.first !== userId && match.second !== userId))
+      return false
     await this.client.sAdd(this.key('match-acks', matchId), userId)
     await this.client.expire(this.key('match-acks', matchId), 20)
     return (await this.client.sCard(this.key('match-acks', matchId))) === 2
   }
   async closeMatch(matchId: string, userId: string, recentTtlSeconds = 60) {
     const match = await this.getMatch(matchId)
-    if (!match || (match.first !== userId && match.second !== userId)) return null
+    if (!match || (match.first !== userId && match.second !== userId))
+      return null
     await this.client
       .multi()
       .del(this.key('match', matchId))
       .del(this.key('match-acks', matchId))
       .del(this.key('active', match.first))
       .del(this.key('active', match.second))
-      .set(this.key('deny', match.first, match.second), '1', { EX: recentTtlSeconds })
+      .set(this.key('deny', match.first, match.second), '1', {
+        EX: recentTtlSeconds,
+      })
       .exec()
     return match
+  }
+  async blockPair(first: string, second: string) {
+    await this.client
+      .multi()
+      .set(this.key('deny', first, second), '1', { EX: 86_400 })
+      .set(this.key('deny', second, first), '1', { EX: 86_400 })
+      .zRem(this.key('queue', 'minor_16_17:text'), [first, second])
+      .zRem(this.key('queue', 'minor_16_17:video'), [first, second])
+      .zRem(this.key('queue', 'adult_18_plus:text'), [first, second])
+      .zRem(this.key('queue', 'adult_18_plus:video'), [first, second])
+      .exec()
+    for (const userId of [first, second]) {
+      const active = await this.client.get(this.key('active', userId))
+      if (active && active !== 'queued')
+        await this.closeMatch(active, userId, 86_400)
+      else
+        await this.client.del([
+          this.key('active', userId),
+          this.key('queue-entry', userId),
+        ])
+    }
+  }
+  async activeMatchBetween(first: string, second: string) {
+    const active = await this.client.get(this.key('active', first))
+    if (!active || active === 'queued') return null
+    const match = await this.getMatch(active)
+    return match && [match.first, match.second].includes(second) ? match : null
   }
   async nextSequence(matchId: string) {
     return this.client.incr(this.key('match-sequence', matchId))
@@ -167,11 +255,14 @@ export class RedisRealtimeStore {
   async publishUser(userId: string, message: string) {
     await this.client.publish(this.key('user-events', userId), message)
   }
-  async subscribeUserEvents(handler: (userId: string, message: string) => void) {
+  async subscribeUserEvents(
+    handler: (userId: string, message: string) => void,
+  ) {
     const subscriber = this.client.duplicate()
     await subscriber.connect()
-    await subscriber.pSubscribe(this.key('user-events', '*'), (message, channel) =>
-      handler(channel.split(':').at(-1)!, message),
+    await subscriber.pSubscribe(
+      this.key('user-events', '*'),
+      (message, channel) => handler(channel.split(':').at(-1)!, message),
     )
     return subscriber
   }

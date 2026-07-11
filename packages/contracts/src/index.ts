@@ -65,7 +65,12 @@ export const accountStateSchema = z.enum([
   'deleted',
 ])
 export const ageCohortSchema = z.enum(['minor_16_17', 'adult_18_plus'])
-export const visibilityAudienceSchema = z.enum(['everyone', 'encounters', 'friends', 'only_me'])
+export const visibilityAudienceSchema = z.enum([
+  'everyone',
+  'encounters',
+  'friends',
+  'only_me',
+])
 export const profileFieldSchema = z.enum([
   'avatar',
   'bio',
@@ -150,7 +155,10 @@ export const profilePatchRequestSchema = profileSchema
     status: true,
   })
   .partial()
-  .refine((value) => Object.keys(value).length > 0, 'At least one profile field is required')
+  .refine(
+    (value) => Object.keys(value).length > 0,
+    'At least one profile field is required',
+  )
 export const visibilityPatchRequestSchema = z.object({
   fields: z.record(profileFieldSchema, visibilityAudienceSchema),
 })
@@ -165,6 +173,48 @@ export const realtimeTicketResponseSchema = z.object({
   expiresAt: timestampSchema,
 })
 export const matchModeSchema = z.enum(['text', 'video'])
+export const blockReasonSchema = z.enum([
+  'safety',
+  'harassment',
+  'spam',
+  'other',
+])
+export const blockCreateRequestSchema = z.object({
+  userId: internalIdSchema,
+  reasonCategory: blockReasonSchema,
+})
+export const friendRequestCreateSchema = z.object({
+  userId: internalIdSchema,
+  encounterId: internalIdSchema,
+})
+export const friendRequestActionSchema = z.object({
+  action: z.enum(['accept', 'reject', 'cancel']),
+})
+export const muteRequestSchema = z.object({
+  scope: z.enum(['all', 'messages', 'calls']).default('all'),
+  expiresAt: timestampSchema.optional(),
+})
+export const encounterSchema = z.object({
+  id: internalIdSchema,
+  mode: matchModeSchema,
+  startedAt: timestampSchema,
+  endedAt: timestampSchema.nullable(),
+  otherUser: z.object({
+    id: internalIdSchema,
+    username: z.string(),
+    displayName: z.string(),
+    avatarAvailable: z.boolean(),
+  }),
+  friendshipState: z.literal('none'),
+  requestState: z.literal('none'),
+  hidden: z.boolean(),
+  reported: z.boolean(),
+  blocked: z.boolean(),
+})
+export const encounterListResponseSchema = z.object({
+  items: z.array(encounterSchema),
+  nextCursor: cursorSchema.nullable(),
+})
 export const matchJoinRequestSchema = z.object({
   mode: matchModeSchema,
   allowPreferenceRelaxation: z.boolean().default(false),
@@ -187,7 +237,9 @@ export const rtcCredentialsResponseSchema = z.object({
 export const meResponseSchema = z.object({
   account: accountSchema,
   profile: profileSchema.nullable(),
-  onboardingSteps: z.array(z.enum(['birth_date', 'policies', 'profile', 'preferences'])),
+  onboardingSteps: z.array(
+    z.enum(['birth_date', 'policies', 'profile', 'preferences']),
+  ),
 })
 export const profileProjectionSchema = profileSchema
   .partial()
@@ -205,7 +257,9 @@ export const avatarUploadInitResponseSchema = z.object({
   uploadUrl: z.string().min(1),
   expiresAt: timestampSchema,
 })
-export const avatarUploadFinalizeRequestSchema = z.object({ uploadId: internalIdSchema })
+export const avatarUploadFinalizeRequestSchema = z.object({
+  uploadId: internalIdSchema,
+})
 export const avatarResponseSchema = z.object({ avatarUrl: z.string().min(1) })
 
 const connectionReadyPayloadSchema = z.object({
@@ -213,7 +267,10 @@ const connectionReadyPayloadSchema = z.object({
   connectionId: internalIdSchema,
 })
 const connectionPingPayloadSchema = z.object({ sentAt: timestampSchema })
-const errorPayloadSchema = z.object({ code: errorCodeSchema, message: z.string().min(1).max(500) })
+const errorPayloadSchema = z.object({
+  code: errorCodeSchema,
+  message: z.string().min(1).max(500),
+})
 const matchIdPayloadSchema = z.object({ matchId: internalIdSchema })
 const matchJoinPayloadSchema = matchJoinRequestSchema
 const rtcDescriptionPayloadSchema = matchIdPayloadSchema.extend({
@@ -294,6 +351,12 @@ export const clientRealtimeEnvelopeSchema = z.discriminatedUnion('type', [
 export const serverRealtimeEnvelopeSchema = z.discriminatedUnion('type', [
   z.object({
     version: z.literal(PROTOCOL_VERSION),
+    type: z.literal('presence.changed'),
+    requestId: requestIdSchema,
+    payload: z.object({ userId: internalIdSchema, online: z.boolean() }),
+  }),
+  z.object({
+    version: z.literal(PROTOCOL_VERSION),
     type: z.literal('connection.ready'),
     requestId: requestIdSchema,
     payload: connectionReadyPayloadSchema,
@@ -339,7 +402,14 @@ export const serverRealtimeEnvelopeSchema = z.discriminatedUnion('type', [
     type: z.literal('match.ended'),
     requestId: requestIdSchema,
     payload: matchIdPayloadSchema.extend({
-      reason: z.enum(['left', 'next', 'peer_left', 'ack_timeout', 'disconnected', 'blocked']),
+      reason: z.enum([
+        'left',
+        'next',
+        'peer_left',
+        'ack_timeout',
+        'disconnected',
+        'blocked',
+      ]),
     }),
   }),
   z.object({
@@ -401,7 +471,14 @@ function utf8ByteLength(input: string): number {
   let bytes = 0
   for (const character of input) {
     const codePoint = character.codePointAt(0) ?? 0
-    bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4
+    bytes +=
+      codePoint <= 0x7f
+        ? 1
+        : codePoint <= 0x7ff
+          ? 2
+          : codePoint <= 0xffff
+            ? 3
+            : 4
   }
   return bytes
 }
@@ -415,7 +492,10 @@ export function parseClientRealtimeMessage(input: string) {
     const parsed = clientRealtimeEnvelopeSchema.safeParse(decoded)
     return parsed.success
       ? parsed
-      : { success: false as const, error: 'unknown_or_invalid_command' as const }
+      : {
+          success: false as const,
+          error: 'unknown_or_invalid_command' as const,
+        }
   } catch {
     return { success: false as const, error: 'malformed_json' as const }
   }
@@ -424,7 +504,9 @@ export function parseClientRealtimeMessage(input: string) {
 export type Account = z.infer<typeof accountSchema>
 export type AccountState = z.infer<typeof accountStateSchema>
 export type AgeCohort = z.infer<typeof ageCohortSchema>
-export type ClientRealtimeEnvelope = z.infer<typeof clientRealtimeEnvelopeSchema>
+export type ClientRealtimeEnvelope = z.infer<
+  typeof clientRealtimeEnvelopeSchema
+>
 export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>
 export type OnboardingRequest = z.infer<typeof onboardingRequestSchema>
 export type MatchMode = z.infer<typeof matchModeSchema>

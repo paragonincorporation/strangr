@@ -7,6 +7,9 @@ import { parseServerConfig, type ServerConfig } from '@strangr/config'
 import {
   avatarUploadFinalizeRequestSchema,
   avatarUploadInitRequestSchema,
+  blockCreateRequestSchema,
+  friendRequestActionSchema,
+  friendRequestCreateSchema,
   healthResponseSchema,
   onboardingRequestSchema,
   parseClientRealtimeMessage,
@@ -17,8 +20,15 @@ import {
   type AccountState,
   type ClientRealtimeEnvelope,
   matchJoinRequestSchema,
+  muteRequestSchema,
 } from '@strangr/contracts'
-import { createAesGcmFieldEncryptor, createDatabase } from '@strangr/database'
+import {
+  BlockRepository,
+  EncounterRepository,
+  FriendRepository,
+  createAesGcmFieldEncryptor,
+  createDatabase,
+} from '@strangr/database'
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import { WebSocket, WebSocketServer, type RawData } from 'ws'
@@ -52,6 +62,9 @@ export interface CreateAppOptions {
   accounts?: AccountService
   avatars?: AvatarService
   realtime?: RedisRealtimeStore
+  encounters?: EncounterRepository
+  blocks?: BlockRepository
+  friends?: FriendRepository
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -63,9 +76,17 @@ export function createApp(options: CreateAppOptions = {}) {
     ...config.PREVIEW_ALLOWED_ORIGINS,
   ])
   const originAllowed = (origin: string | undefined) =>
-    origin === undefined ? config.NODE_ENV !== 'production' : allowedOrigins.has(origin)
+    origin === undefined
+      ? config.NODE_ENV !== 'production'
+      : allowedOrigins.has(origin)
   const connection =
-    options.accounts && options.avatars ? null : createDatabase(config.DATABASE_URL)
+    options.accounts &&
+    options.avatars &&
+    options.encounters &&
+    options.blocks &&
+    options.friends
+      ? null
+      : createDatabase(config.DATABASE_URL)
   const encryptor = createAesGcmFieldEncryptor(
     Buffer.from(config.BIRTH_DATE_ENCRYPTION_KEY, 'base64'),
     config.BIRTH_DATE_KEY_ID,
@@ -88,14 +109,27 @@ export function createApp(options: CreateAppOptions = {}) {
     )
   const verifier = options.tokenVerifier ?? createSupabaseTokenVerifier(config)
   const realtime = options.realtime ?? new RedisRealtimeStore(config.REDIS_URL)
+  const encounters =
+    options.encounters ?? new EncounterRepository(connection!.db)
+  const blocks = options.blocks ?? new BlockRepository(connection!.db)
+  const friends = options.friends ?? new FriendRepository(connection!.db)
+  if ('setBlockChecker' in realtime)
+    realtime.setBlockChecker((first, second) =>
+      blocks.hasEitherDirection(first, second),
+    )
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 16_384 })
   const localSockets = new Map<string, WebSocket>()
-  let subscriber: Awaited<ReturnType<RedisRealtimeStore['subscribeUserEvents']>> | null = null
+  let subscriber: Awaited<
+    ReturnType<RedisRealtimeStore['subscribeUserEvents']>
+  > | null = null
   app.addHook('onReady', async () => {
     await realtime.connect()
     subscriber = await realtime.subscribeUserEvents((userId, message) => {
       for (const [key, socket] of localSockets)
-        if (key.startsWith(`${userId}:`) && socket.readyState === WebSocket.OPEN)
+        if (
+          key.startsWith(`${userId}:`) &&
+          socket.readyState === WebSocket.OPEN
+        )
           socket.send(message)
     })
   })
@@ -119,7 +153,9 @@ export function createApp(options: CreateAppOptions = {}) {
   const authenticate = async (request: FastifyRequest, reply: FastifyReply) => {
     const header = request.headers.authorization
     if (!header?.startsWith('Bearer ')) {
-      return reply.code(401).send(error('unauthenticated', 'Authentication required', request.id))
+      return reply
+        .code(401)
+        .send(error('unauthenticated', 'Authentication required', request.id))
     }
     try {
       const identity = await verifier.verify(header.slice(7))
@@ -140,22 +176,38 @@ export function createApp(options: CreateAppOptions = {}) {
     } catch {
       return reply
         .code(401)
-        .send(error('unauthenticated', 'Invalid or expired access token', request.id))
+        .send(
+          error(
+            'unauthenticated',
+            'Invalid or expired access token',
+            request.id,
+          ),
+        )
     }
   }
   const guard =
-    (capability: Capability) => async (request: FastifyRequest, reply: FastifyReply) => {
+    (capability: Capability) =>
+    async (request: FastifyRequest, reply: FastifyReply) => {
       await authenticate(request, reply)
       if (reply.sent) return
       const auth = request.auth!
-      const code = capabilityError(auth.user.accountState, auth.user.emailVerified, capability)
+      const code = capabilityError(
+        auth.user.accountState,
+        auth.user.emailVerified,
+        capability,
+      )
       if (code)
         return reply
           .code(403)
-          .send(error(code, 'This account cannot perform that action', request.id))
+          .send(
+            error(code, 'This account cannot perform that action', request.id),
+          )
     }
   const route =
-    <T>(schema: z.ZodType<T>, handler: (request: FastifyRequest, value: T) => Promise<unknown>) =>
+    <T>(
+      schema: z.ZodType<T>,
+      handler: (request: FastifyRequest, value: T) => Promise<unknown>,
+    ) =>
     async (request: FastifyRequest, reply: FastifyReply) => {
       const parsed = schema.safeParse(request.body)
       if (!parsed.success)
@@ -173,37 +225,49 @@ export function createApp(options: CreateAppOptions = {}) {
         return domainReply(reply, request.id, e)
       }
     }
-  app.get('/v1/me', { preHandler: guard('inspect_self') }, async (req, reply) => {
-    try {
-      return await accounts.me(req.auth!.user.id)
-    } catch (e) {
-      return domainReply(reply, req.id, e)
-    }
-  })
+  app.get(
+    '/v1/me',
+    { preHandler: guard('inspect_self') },
+    async (req, reply) => {
+      try {
+        return await accounts.me(req.auth!.user.id)
+      } catch (e) {
+        return domainReply(reply, req.id, e)
+      }
+    },
+  )
   app.get('/v1/me/sessions', { preHandler: guard('inspect_self') }, (req) =>
     accounts.sessions(req.auth!.user.id),
   )
-  app.delete('/v1/me/sessions/:id', { preHandler: guard('inspect_self') }, async (req, reply) => {
-    try {
-      const sessionId = (req.params as { id: string }).id
-      await accounts.revokeSession(req.auth!.user.id, sessionId)
-      await realtime.revokeSession(sessionId)
-      return reply.code(204).send()
-    } catch (e) {
-      return domainReply(reply, req.id, e)
-    }
-  })
-  app.post('/v1/realtime/tickets', { preHandler: guard('contact') }, async (req, reply) => {
-    try {
-      const identity = await accounts.realtimeIdentity(
-        req.auth!.user.id,
-        req.auth!.identity.authSessionId,
-      )
-      return await realtime.createTicket(identity)
-    } catch (cause) {
-      return domainReply(reply, req.id, cause)
-    }
-  })
+  app.delete(
+    '/v1/me/sessions/:id',
+    { preHandler: guard('inspect_self') },
+    async (req, reply) => {
+      try {
+        const sessionId = (req.params as { id: string }).id
+        await accounts.revokeSession(req.auth!.user.id, sessionId)
+        await realtime.revokeSession(sessionId)
+        return reply.code(204).send()
+      } catch (e) {
+        return domainReply(reply, req.id, e)
+      }
+    },
+  )
+  app.post(
+    '/v1/realtime/tickets',
+    { preHandler: guard('contact') },
+    async (req, reply) => {
+      try {
+        const identity = await accounts.realtimeIdentity(
+          req.auth!.user.id,
+          req.auth!.identity.authSessionId,
+        )
+        return await realtime.createTicket(identity)
+      } catch (cause) {
+        return domainReply(reply, req.id, cause)
+      }
+    },
+  )
   app.post(
     '/v1/matches/tickets',
     { preHandler: guard('contact') },
@@ -212,7 +276,11 @@ export function createApp(options: CreateAppOptions = {}) {
         req.auth!.user.id,
         req.auth!.identity.authSessionId,
       )
-      const limit = await realtime.rateLimit(`match:user:${identity.userId}`, 20, 60)
+      const limit = await realtime.rateLimit(
+        `match:user:${identity.userId}`,
+        20,
+        60,
+      )
       if (!limit.allowed)
         throw new DomainError(
           'rate_limited',
@@ -220,7 +288,13 @@ export function createApp(options: CreateAppOptions = {}) {
           429,
         )
       const result = await realtime.joinQueue(identity, input.mode)
-      if (result.match) await publishMatch(realtime, result.match)
+      if (result.match) {
+        await encounters.start(result.match.id, result.match.mode, [
+          result.match.first,
+          result.match.second,
+        ])
+        await publishMatch(realtime, result.match)
+      }
       return {
         state: result.match ? 'matched' : 'queued',
         mode: input.mode,
@@ -228,35 +302,41 @@ export function createApp(options: CreateAppOptions = {}) {
       }
     }),
   )
-  app.post('/v1/rtc/credentials', { preHandler: guard('contact') }, async (req, reply) => {
-    try {
-      const identity = await accounts.realtimeIdentity(
-        req.auth!.user.id,
-        req.auth!.identity.authSessionId,
-      )
-      const expires = Math.floor(Date.now() / 1000) + 300
-      const username = `${expires}:${identity.userId}`
-      const credential = createHmac('sha256', config.TURN_CREDENTIAL_SECRET)
-        .update(username)
-        .digest('base64')
-      return {
-        iceServers: [
-          {
-            urls: config.TURN_URLS.split(',').map((x) => x.trim()),
-            username,
-            credential,
-          },
-        ],
-        expiresAt: new Date(expires * 1000).toISOString(),
+  app.post(
+    '/v1/rtc/credentials',
+    { preHandler: guard('contact') },
+    async (req, reply) => {
+      try {
+        const identity = await accounts.realtimeIdentity(
+          req.auth!.user.id,
+          req.auth!.identity.authSessionId,
+        )
+        const expires = Math.floor(Date.now() / 1000) + 300
+        const username = `${expires}:${identity.userId}`
+        const credential = createHmac('sha256', config.TURN_CREDENTIAL_SECRET)
+          .update(username)
+          .digest('base64')
+        return {
+          iceServers: [
+            {
+              urls: config.TURN_URLS.split(',').map((x) => x.trim()),
+              username,
+              credential,
+            },
+          ],
+          expiresAt: new Date(expires * 1000).toISOString(),
+        }
+      } catch (cause) {
+        return domainReply(reply, req.id, cause)
       }
-    } catch (cause) {
-      return domainReply(reply, req.id, cause)
-    }
-  })
+    },
+  )
   app.post(
     '/v1/me/onboarding',
     { preHandler: guard('profile_setup') },
-    route(onboardingRequestSchema, (req, input) => accounts.onboarding(req.auth!.user.id, input)),
+    route(onboardingRequestSchema, (req, input) =>
+      accounts.onboarding(req.auth!.user.id, input),
+    ),
   )
   app.patch(
     '/v1/profiles/me',
@@ -272,27 +352,241 @@ export function createApp(options: CreateAppOptions = {}) {
       accounts.patchVisibility(req.auth!.user.id, input.fields),
     ),
   )
-  app.get('/v1/profiles/:username', { preHandler: guard('contact') }, async (req, reply) => {
-    try {
-      return await accounts.profile(
+  app.get(
+    '/v1/profiles/:username',
+    { preHandler: guard('contact') },
+    async (req, reply) => {
+      try {
+        if (
+          await blocks.blocksUsername(
+            req.auth!.user.id,
+            (req.params as { username: string }).username,
+          )
+        )
+          throw new DomainError('not_found', 'Profile unavailable', 404)
+        return await accounts.profile(
+          req.auth!.user.id,
+          (req.params as { username: string }).username,
+        )
+      } catch (e) {
+        return domainReply(reply, req.id, e)
+      }
+    },
+  )
+  app.get(
+    '/v1/encounters',
+    { preHandler: guard('contact') },
+    async (req, reply) => {
+      try {
+        const query = req.query as {
+          cursor?: string
+          limit?: string
+          window?: string
+        }
+        if (query.window !== undefined && query.window !== '48h')
+          throw new DomainError(
+            'bad_request',
+            'Only the 48 hour window is available',
+          )
+        const limit = Math.min(50, Math.max(1, Number(query.limit ?? 20)))
+        if (!Number.isInteger(limit))
+          throw new DomainError('bad_request', 'Invalid limit')
+        return await encounters.list(req.auth!.user.id, query.cursor, limit)
+      } catch (cause) {
+        return domainReply(reply, req.id, cause)
+      }
+    },
+  )
+  app.delete(
+    '/v1/encounters/:id/view',
+    { preHandler: guard('contact') },
+    async (req, reply) => {
+      try {
+        const hidden = await encounters.hide(
+          req.auth!.user.id,
+          (req.params as { id: string }).id,
+        )
+        if (!hidden)
+          throw new DomainError('not_found', 'Encounter unavailable', 404)
+        return reply.code(204).send()
+      } catch (cause) {
+        return domainReply(reply, req.id, cause)
+      }
+    },
+  )
+  app.post(
+    '/v1/blocks',
+    { preHandler: guard('contact') },
+    route(blockCreateRequestSchema, async (req, input) => {
+      if (input.userId === req.auth!.user.id)
+        throw new DomainError('bad_request', 'Cannot block this account')
+      const created = await blocks.create(
         req.auth!.user.id,
-        (req.params as { username: string }).username,
+        input.userId,
+        input.reasonCategory,
       )
-    } catch (e) {
-      return domainReply(reply, req.id, e)
+      const activeMatch = await realtime.activeMatchBetween(
+        req.auth!.user.id,
+        input.userId,
+      )
+      await realtime.blockPair(req.auth!.user.id, input.userId)
+      if (activeMatch) {
+        await encounters.end(activeMatch.id, 'blocked', req.auth!.user.id)
+        const requestId = randomUUID()
+        for (const userId of [req.auth!.user.id, input.userId])
+          await realtime.publishUser(
+            userId,
+            JSON.stringify({
+              version: PROTOCOL_VERSION,
+              type: 'match.ended',
+              requestId,
+              payload: { matchId: activeMatch.id, reason: 'blocked' },
+            }),
+          )
+      }
+      return { id: created.id, createdAt: created.createdAt.toISOString() }
+    }),
+  )
+  app.delete(
+    '/v1/blocks/:userId',
+    { preHandler: guard('contact') },
+    async (req, reply) => {
+      await blocks.remove(
+        req.auth!.user.id,
+        (req.params as { userId: string }).userId,
+      )
+      return reply.code(204).send()
+    },
+  )
+  app.post(
+    '/v1/friend-requests',
+    { preHandler: guard('contact') },
+    route(friendRequestCreateSchema, async (req, input) => {
+      try {
+        return await friends.createRequest(
+          req.auth!.user.id,
+          input.userId,
+          input.encounterId,
+        )
+      } catch (cause) {
+        throw socialError(cause)
+      }
+    }),
+  )
+  app.get(
+    '/v1/friend-requests',
+    { preHandler: guard('contact') },
+    async (req) => ({
+      items: await friends.requests(req.auth!.user.id),
+    }),
+  )
+  app.post(
+    '/v1/friend-requests/:id/actions',
+    { preHandler: guard('contact') },
+    route(friendRequestActionSchema, async (req, input) => {
+      try {
+        return await friends.resolve(
+          req.auth!.user.id,
+          (req.params as { id: string }).id,
+          input.action,
+        )
+      } catch (cause) {
+        throw socialError(cause)
+      }
+    }),
+  )
+  app.get('/v1/friends', { preHandler: guard('contact') }, async (req) => {
+    const query = req.query as { cursor?: string; limit?: string }
+    const result = await friends.list(
+      req.auth!.user.id,
+      query.cursor,
+      Math.min(50, Math.max(1, Number(query.limit ?? 20))),
+    )
+    return {
+      items: await Promise.all(
+        result.items.map(async (item) => ({
+          id: item.id,
+          user: {
+            id: item.user_id,
+            username: item.username,
+            displayName: item.display_name,
+          },
+          presence:
+            item.show_presence && (await realtime.isUserOnline(item.user_id))
+              ? 'online'
+              : 'hidden',
+        })),
+      ),
+      nextCursor: result.nextCursor,
     }
   })
-  app.get('/v1/profiles/:username/avatar', { preHandler: guard('contact') }, async (req, reply) => {
-    try {
-      const ownerId = await accounts.avatarOwner(
-        req.auth!.user.id,
-        (req.params as { username: string }).username,
+  app.delete(
+    '/v1/friends/:id',
+    { preHandler: guard('contact') },
+    async (req, reply) => {
+      if (
+        !(await friends.unfriend(
+          req.auth!.user.id,
+          (req.params as { id: string }).id,
+        ))
       )
-      return reply.redirect(await avatars.signedAvatar(ownerId))
-    } catch (cause) {
-      return domainReply(reply, req.id, cause)
-    }
-  })
+        return reply
+          .code(404)
+          .send(error('not_found', 'Friend unavailable', req.id))
+      return reply.code(204).send()
+    },
+  )
+  app.put(
+    '/v1/mutes/:userId',
+    { preHandler: guard('contact') },
+    route(muteRequestSchema, async (req, input) => {
+      await friends.mute(
+        req.auth!.user.id,
+        (req.params as { userId: string }).userId,
+        input.scope,
+        input.expiresAt ? new Date(input.expiresAt) : undefined,
+      )
+      return { muted: true }
+    }),
+  )
+  app.delete(
+    '/v1/mutes/:userId',
+    { preHandler: guard('contact') },
+    async (req, reply) => {
+      const query = req.query as { scope?: 'all' | 'messages' | 'calls' }
+      await friends.unmute(
+        req.auth!.user.id,
+        (req.params as { userId: string }).userId,
+        query.scope ?? 'all',
+      )
+      return reply.code(204).send()
+    },
+  )
+  app.get('/v1/counts', { preHandler: guard('contact') }, (req) =>
+    friends.counts(req.auth!.user.id),
+  )
+  app.get(
+    '/v1/profiles/:username/avatar',
+    { preHandler: guard('contact') },
+    async (req, reply) => {
+      try {
+        if (
+          await blocks.blocksUsername(
+            req.auth!.user.id,
+            (req.params as { username: string }).username,
+          )
+        )
+          throw new DomainError('not_found', 'Avatar unavailable', 404)
+        const ownerId = await accounts.avatarOwner(
+          req.auth!.user.id,
+          (req.params as { username: string }).username,
+        )
+        return reply.redirect(await avatars.signedAvatar(ownerId))
+      } catch (cause) {
+        return domainReply(reply, req.id, cause)
+      }
+    },
+  )
   app.post(
     '/v1/me/avatar-uploads',
     { preHandler: guard('profile_setup') },
@@ -349,17 +643,24 @@ export function createApp(options: CreateAppOptions = {}) {
           dependencies: { postgres: 'up' as const, redis: 'up' as const },
         }
       } catch {
-        return reply.code(503).send({ ok: false, dependencies: { postgres: 'up', redis: 'down' } })
+        return reply
+          .code(503)
+          .send({ ok: false, dependencies: { postgres: 'up', redis: 'down' } })
       }
     },
   )
 
   sockets.on(
     'connection',
-    (socket: WebSocket, _request: IncomingMessage, identity: RealtimeIdentity) => {
+    (
+      socket: WebSocket,
+      _request: IncomingMessage,
+      identity: RealtimeIdentity,
+    ) => {
       const connectionId = randomUUID()
       localSockets.set(`${identity.userId}:${connectionId}`, socket)
       void realtime.bindConnection(identity, connectionId)
+      void publishPresence(friends, realtime, identity.userId, true)
       let malformed = 0
       let alive = true
       const heartbeat = setInterval(() => {
@@ -403,11 +704,14 @@ export function createApp(options: CreateAppOptions = {}) {
         if (!parsed.success) {
           malformed++
           if (parsed.error === 'payload_too_large' || malformed >= 3)
-            socket.close(parsed.error === 'payload_too_large' ? 1009 : 1008, parsed.error)
+            socket.close(
+              parsed.error === 'payload_too_large' ? 1009 : 1008,
+              parsed.error,
+            )
           return
         }
         const event = parsed.data
-        void handleRealtime(event, identity, realtime)
+        void handleRealtime(event, identity, realtime, encounters, blocks)
           .then(async (messages) => {
             for (const item of messages)
               await realtime.publishUser(
@@ -441,6 +745,7 @@ export function createApp(options: CreateAppOptions = {}) {
         clearInterval(heartbeat)
         localSockets.delete(`${identity.userId}:${connectionId}`)
         void realtime.unbindConnection(identity, connectionId)
+        void publishPresence(friends, realtime, identity.userId, false)
       })
     },
   )
@@ -465,7 +770,10 @@ export function createApp(options: CreateAppOptions = {}) {
     void realtime
       .consumeTicket(ticket)
       .then(async (identity) => {
-        if (!identity || (await realtime.isSessionRevoked(identity.sessionId))) {
+        if (
+          !identity ||
+          (await realtime.isSessionRevoked(identity.sessionId))
+        ) {
           socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n')
           socket.destroy()
           return
@@ -478,7 +786,8 @@ export function createApp(options: CreateAppOptions = {}) {
   })
   app.addHook('onClose', () => {
     for (const socket of sockets.clients) {
-      if (socket.readyState === WebSocket.OPEN) socket.close(1001, 'Server shutting down')
+      if (socket.readyState === WebSocket.OPEN)
+        socket.close(1001, 'Server shutting down')
       else socket.terminate()
     }
   })
@@ -520,11 +829,19 @@ async function handleRealtime(
   event: ClientRealtimeEnvelope,
   identity: RealtimeIdentity,
   realtime: RedisRealtimeStore,
+  encounters: EncounterRepository,
+  blocks: BlockRepository,
 ): Promise<Outbound[]> {
   if (event.type === 'connection.ping') return []
   if (event.type === 'match.join') {
     const result = await realtime.joinQueue(identity, event.payload.mode)
-    if (result.match) await publishMatch(realtime, result.match)
+    if (result.match) {
+      await encounters.start(result.match.id, result.match.mode, [
+        result.match.first,
+        result.match.second,
+      ])
+      await publishMatch(realtime, result.match)
+    }
     return result.match
       ? []
       : [
@@ -540,11 +857,17 @@ async function handleRealtime(
         ]
   }
   const match = await realtime.getMatch(event.payload.matchId)
-  if (!match || (match.first !== identity.userId && match.second !== identity.userId))
+  if (
+    !match ||
+    (match.first !== identity.userId && match.second !== identity.userId)
+  )
     throw new Error('match_stale')
   const peerId = match.first === identity.userId ? match.second : match.first
+  if (await blocks.hasEitherDirection(identity.userId, peerId))
+    throw new Error('relationship_unavailable')
   if (event.type === 'match.ack') {
     const connected = await realtime.acknowledge(match.id, identity.userId)
+    if (connected) await encounters.connected(match.id)
     return connected
       ? [match.first, match.second].map((userId) => ({
           userId,
@@ -559,6 +882,11 @@ async function handleRealtime(
   }
   if (event.type === 'match.leave' || event.type === 'match.next') {
     await realtime.closeMatch(match.id, identity.userId)
+    await encounters.end(
+      match.id,
+      event.type === 'match.next' ? 'next' : 'left',
+      identity.userId,
+    )
     const ended: Outbound[] = [match.first, match.second].map((userId) => ({
       userId,
       event: {
@@ -595,6 +923,14 @@ async function handleRealtime(
   if (event.type === 'chat.send') {
     const sequence = await realtime.nextSequence(match.id)
     const sentAt = new Date().toISOString()
+    const saved = await encounters.addRandomMessage(
+      match.id,
+      identity.userId,
+      event.payload.clientMessageId,
+      sequence,
+      event.payload.text,
+      new Date(sentAt),
+    )
     return [
       {
         userId: peerId,
@@ -604,6 +940,7 @@ async function handleRealtime(
           requestId: event.requestId,
           payload: {
             ...event.payload,
+            text: saved.body,
             sequence,
             senderId: identity.userId,
             sentAt,
@@ -640,7 +977,41 @@ function error(
 }
 function domainReply(reply: FastifyReply, requestId: string, cause: unknown) {
   if (cause instanceof DomainError)
-    return reply.code(cause.status).send(error(cause.code, cause.message, requestId))
+    return reply
+      .code(cause.status)
+      .send(error(cause.code, cause.message, requestId))
   reply.log.error({ err: cause }, 'request failed')
-  return reply.code(500).send(error('internal_error', 'Request failed', requestId))
+  return reply
+    .code(500)
+    .send(error('internal_error', 'Request failed', requestId))
+}
+function socialError(cause: unknown) {
+  const code = cause instanceof Error ? cause.message : 'request_unavailable'
+  if (
+    ['self_request', 'encounter_unavailable', 'requests_disabled'].includes(
+      code,
+    )
+  )
+    return new DomainError('bad_request', 'Request is not available', 400)
+  if (code === 'request_expired')
+    return new DomainError('conflict', 'Request expired', 409)
+  return new DomainError('not_found', 'Relationship unavailable', 404)
+}
+async function publishPresence(
+  friends: FriendRepository,
+  realtime: RedisRealtimeStore,
+  userId: string,
+  online: boolean,
+) {
+  const requestId = randomUUID()
+  for (const viewerId of await friends.presenceViewers(userId))
+    await realtime.publishUser(
+      viewerId,
+      JSON.stringify({
+        version: PROTOCOL_VERSION,
+        type: 'presence.changed',
+        requestId,
+        payload: { userId, online },
+      }),
+    )
 }

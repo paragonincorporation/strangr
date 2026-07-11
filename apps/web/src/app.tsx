@@ -13,6 +13,9 @@ import {
   AuthPage,
   ConversationPage,
   HomePage,
+  HistoryPage,
+  FriendsPage,
+  OtherProfilePage,
   LandingPage,
   OnboardingPage,
   PlaceholderPage,
@@ -43,14 +46,9 @@ export const webRoutes: RouteObject[] = [
       { index: true, element: <HomePage /> },
       {
         path: 'friends',
-        element: (
-          <PlaceholderPage
-            description="Accepted friends and incoming requests will live here."
-            eyebrow="SOCIAL CIRCLE"
-            title="Friends"
-          />
-        ),
+        element: <FriendsPage />,
       },
+      { path: 'people/:username', element: <OtherProfilePage /> },
       {
         path: 'messages',
         element: (
@@ -63,13 +61,7 @@ export const webRoutes: RouteObject[] = [
       },
       {
         path: 'history',
-        element: (
-          <PlaceholderPage
-            description="Your privacy-aware 48-hour encounter window arrives in Unit 12."
-            eyebrow="RECENT ENCOUNTERS"
-            title="History"
-          />
-        ),
+        element: <HistoryPage />,
       },
       {
         path: 'profile',
@@ -115,7 +107,9 @@ function Providers({ children }: { children: React.ReactNode }) {
         },
       }),
   )
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  )
 }
 
 export function WebApp({

@@ -1,9 +1,12 @@
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, gt, isNull, or, sql } from 'drizzle-orm'
 import type { Database, FieldEncryptor, UserRow } from '@strangr/database'
 import {
   privacySettings,
   profileFieldVisibility,
   profiles,
+  friendships,
+  encounters,
+  encounterParticipants,
   termsAcceptances,
   userSessions,
   userSettings,
@@ -35,28 +38,43 @@ export class DomainError extends Error {
 
 export function deriveAge(birthDate: string, now = new Date()) {
   const [year, month, day] = birthDate.split('-').map(Number)
-  if (!year || !month || !day) throw new DomainError('bad_request', 'Invalid birth date')
+  if (!year || !month || !day)
+    throw new DomainError('bad_request', 'Invalid birth date')
   const date = new Date(Date.UTC(year, month - 1, day))
   if (date.toISOString().slice(0, 10) !== birthDate)
     throw new DomainError('bad_request', 'Invalid birth date')
   let age = now.getUTCFullYear() - year
-  if (now.getUTCMonth() + 1 < month || (now.getUTCMonth() + 1 === month && now.getUTCDate() < day))
+  if (
+    now.getUTCMonth() + 1 < month ||
+    (now.getUTCMonth() + 1 === month && now.getUTCDate() < day)
+  )
     age--
-  return { age, cohort: age >= 18 ? ('adult_18_plus' as const) : ('minor_16_17' as const) }
+  return {
+    age,
+    cohort: age >= 18 ? ('adult_18_plus' as const) : ('minor_16_17' as const),
+  }
 }
 
 export class AccountService {
   constructor(
     private db: Database,
     private encryptor: FieldEncryptor,
-    private policyVersions = { terms: 'beta-2026-07', guidelines: 'beta-2026-07' },
+    private policyVersions = {
+      terms: 'beta-2026-07',
+      guidelines: 'beta-2026-07',
+    },
   ) {}
-  async reconcile(identity: VerifiedIdentity, deviceLabel: string | null): Promise<UserRow> {
+  async reconcile(
+    identity: VerifiedIdentity,
+    deviceLabel: string | null,
+  ): Promise<UserRow> {
     return this.db.transaction(async (tx) => {
       let [user] = await tx
         .select()
         .from(users)
-        .where(and(eq(users.authSubject, identity.subject), isNull(users.deletedAt)))
+        .where(
+          and(eq(users.authSubject, identity.subject), isNull(users.deletedAt)),
+        )
         .limit(1)
       if (!user) {
         ;[user] = await tx
@@ -64,7 +82,9 @@ export class AccountService {
           .values({
             authSubject: identity.subject,
             emailVerified: identity.emailVerified,
-            accountState: identity.emailVerified ? 'onboarding' : 'pending_verification',
+            accountState: identity.emailVerified
+              ? 'onboarding'
+              : 'pending_verification',
           })
           .onConflictDoNothing()
           .returning()
@@ -72,7 +92,12 @@ export class AccountService {
           [user] = await tx
             .select()
             .from(users)
-            .where(and(eq(users.authSubject, identity.subject), isNull(users.deletedAt)))
+            .where(
+              and(
+                eq(users.authSubject, identity.subject),
+                isNull(users.deletedAt),
+              ),
+            )
             .limit(1)
       }
       if (!user) throw new Error('Identity reconciliation failed')
@@ -82,7 +107,9 @@ export class AccountService {
           .set({
             emailVerified: true,
             accountState:
-              user.accountState === 'pending_verification' ? 'onboarding' : user.accountState,
+              user.accountState === 'pending_verification'
+                ? 'onboarding'
+                : user.accountState,
             updatedAt: new Date(),
           })
           .where(eq(users.id, user.id))
@@ -110,7 +137,11 @@ export class AccountService {
       const reconciled = user
       await tx
         .insert(userSessions)
-        .values({ userId: reconciled.id, authSessionId: identity.authSessionId, deviceLabel })
+        .values({
+          userId: reconciled.id,
+          authSessionId: identity.authSessionId,
+          deviceLabel,
+        })
         .onConflictDoUpdate({
           target: [userSessions.userId, userSessions.authSessionId],
           set: { lastSeenAt: new Date(), deviceLabel },
@@ -119,7 +150,11 @@ export class AccountService {
     })
   }
   async me(userId: string) {
-    const [account] = await this.db.select().from(users).where(eq(users.id, userId)).limit(1)
+    const [account] = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
     if (!account) throw new DomainError('not_found', 'Account not found', 404)
     const [profile] = await this.db
       .select()
@@ -137,7 +172,8 @@ export class AccountService {
       .where(eq(termsAcceptances.userId, userId))
     const steps: string[] = []
     if (account.birthDateCiphertext) steps.push('birth_date')
-    if (new Set(acceptances.map((x) => x.policyType)).size === 2) steps.push('policies')
+    if (new Set(acceptances.map((x) => x.policyType)).size === 2)
+      steps.push('policies')
     if (profile) steps.push('profile')
     if (privacy) steps.push('preferences')
     return {
@@ -148,7 +184,9 @@ export class AccountService {
         emailVerified: account.emailVerified,
         createdAt: account.createdAt.toISOString(),
       },
-      profile: profile ? serializeProfile(profile, privacy?.isPrivate ?? false, null) : null,
+      profile: profile
+        ? serializeProfile(profile, privacy?.isPrivate ?? false, null)
+        : null,
       onboardingSteps: steps,
     }
   }
@@ -157,7 +195,11 @@ export class AccountService {
       if (input.step === 'birth_date') {
         const { age, cohort } = deriveAge(input.birthDate, now)
         if (age < 16)
-          throw new DomainError('forbidden', 'You must be at least 16 to use Strangr', 403)
+          throw new DomainError(
+            'forbidden',
+            'You must be at least 16 to use Strangr',
+            403,
+          )
         const encrypted = this.encryptor.encrypt(input.birthDate)
         await tx
           .update(users)
@@ -173,7 +215,11 @@ export class AccountService {
           input.termsVersion !== this.policyVersions.terms ||
           input.guidelinesVersion !== this.policyVersions.guidelines
         )
-          throw new DomainError('conflict', 'Policy versions have changed; review them again', 409)
+          throw new DomainError(
+            'conflict',
+            'Policy versions have changed; review them again',
+            409,
+          )
         await tx
           .insert(termsAcceptances)
           .values([
@@ -222,7 +268,10 @@ export class AccountService {
             PROFILE_FIELDS.map((field) => ({
               userId,
               field,
-              audience: field === 'avatar' ? ('everyone' as const) : ('friends' as const),
+              audience:
+                field === 'avatar'
+                  ? ('everyone' as const)
+                  : ('friends' as const),
             })),
           )
           .onConflictDoNothing()
@@ -230,10 +279,17 @@ export class AccountService {
         await tx
           .insert(privacySettings)
           .values({ userId, ...input })
-          .onConflictDoUpdate({ target: privacySettings.userId, set: { ...input, updatedAt: now } })
+          .onConflictDoUpdate({
+            target: privacySettings.userId,
+            set: { ...input, updatedAt: now },
+          })
         await tx
           .insert(userSettings)
-          .values({ userId, reducedMotion: input.reducedMotion, highContrast: input.highContrast })
+          .values({
+            userId,
+            reducedMotion: input.reducedMotion,
+            highContrast: input.highContrast,
+          })
           .onConflictDoUpdate({
             target: userSettings.userId,
             set: {
@@ -244,9 +300,18 @@ export class AccountService {
           })
       }
       const [u] = await tx.select().from(users).where(eq(users.id, userId))
-      const p = await tx.select().from(profiles).where(eq(profiles.userId, userId))
-      const a = await tx.select().from(termsAcceptances).where(eq(termsAcceptances.userId, userId))
-      const pr = await tx.select().from(privacySettings).where(eq(privacySettings.userId, userId))
+      const p = await tx
+        .select()
+        .from(profiles)
+        .where(eq(profiles.userId, userId))
+      const a = await tx
+        .select()
+        .from(termsAcceptances)
+        .where(eq(termsAcceptances.userId, userId))
+      const pr = await tx
+        .select()
+        .from(privacySettings)
+        .where(eq(privacySettings.userId, userId))
       if (
         u?.emailVerified &&
         u.birthDateCiphertext &&
@@ -273,28 +338,37 @@ export class AccountService {
         .where(eq(privacySettings.userId, userId))
     return this.me(userId)
   }
-  async patchVisibility(userId: string, fields: Record<string, VisibilityAudience>) {
+  async patchVisibility(
+    userId: string,
+    fields: Record<string, VisibilityAudience>,
+  ) {
     await this.db.transaction(async (tx) => {
       for (const [field, audience] of Object.entries(fields))
         await tx
           .insert(profileFieldVisibility)
           .values({ userId, field, audience })
           .onConflictDoUpdate({
-            target: [profileFieldVisibility.userId, profileFieldVisibility.field],
+            target: [
+              profileFieldVisibility.userId,
+              profileFieldVisibility.field,
+            ],
             set: { audience, updatedAt: new Date() },
           })
     })
     return { fields }
   }
   async sessions(userId: string) {
-    return (await this.db.select().from(userSessions).where(eq(userSessions.userId, userId))).map(
-      (x) => ({
-        id: x.id,
-        deviceLabel: x.deviceLabel,
-        lastSeenAt: x.lastSeenAt.toISOString(),
-        revokedAt: x.revokedAt?.toISOString() ?? null,
-      }),
-    )
+    return (
+      await this.db
+        .select()
+        .from(userSessions)
+        .where(eq(userSessions.userId, userId))
+    ).map((x) => ({
+      id: x.id,
+      deviceLabel: x.deviceLabel,
+      lastSeenAt: x.lastSeenAt.toISOString(),
+      revokedAt: x.revokedAt?.toISOString() ?? null,
+    }))
   }
   async revokeSession(userId: string, id: string) {
     const rows = await this.db
@@ -302,7 +376,8 @@ export class AccountService {
       .set({ revokedAt: new Date() })
       .where(and(eq(userSessions.userId, userId), eq(userSessions.id, id)))
       .returning()
-    if (!rows.length) throw new DomainError('not_found', 'Session not found', 404)
+    if (!rows.length)
+      throw new DomainError('not_found', 'Session not found', 404)
   }
   async realtimeIdentity(userId: string, authSessionId: string) {
     const [row] = await this.db
@@ -317,13 +392,21 @@ export class AccountService {
       .from(users)
       .innerJoin(
         userSessions,
-        and(eq(userSessions.userId, users.id), eq(userSessions.authSessionId, authSessionId)),
+        and(
+          eq(userSessions.userId, users.id),
+          eq(userSessions.authSessionId, authSessionId),
+        ),
       )
       .where(eq(users.id, userId))
       .limit(1)
-    if (!row || row.revokedAt) throw new DomainError('unauthenticated', 'Session unavailable', 401)
+    if (!row || row.revokedAt)
+      throw new DomainError('unauthenticated', 'Session unavailable', 401)
     if (row.state !== 'active' || !row.emailVerified || !row.cohort)
-      throw new DomainError('forbidden', 'Account is not eligible for realtime contact', 403)
+      throw new DomainError(
+        'forbidden',
+        'Account is not eligible for realtime contact',
+        403,
+      )
     return { userId: row.userId, sessionId: row.sessionId, cohort: row.cohort }
   }
   async profile(viewerId: string, username: string) {
@@ -343,15 +426,53 @@ export class AccountService {
       .select()
       .from(profileFieldVisibility)
       .where(eq(profileFieldVisibility.userId, p.userId))
+    const [friend] = await this.db
+      .select({ id: friendships.id })
+      .from(friendships)
+      .where(
+        and(
+          eq(friendships.state, 'active'),
+          or(
+            and(
+              eq(friendships.firstUserId, viewerId),
+              eq(friendships.secondUserId, p.userId),
+            ),
+            and(
+              eq(friendships.firstUserId, p.userId),
+              eq(friendships.secondUserId, viewerId),
+            ),
+          ),
+        ),
+      )
+      .limit(1)
+    const [recent] = await this.db
+      .select({ id: encounters.id })
+      .from(encounters)
+      .innerJoin(
+        encounterParticipants,
+        eq(encounterParticipants.encounterId, encounters.id),
+      )
+      .where(
+        and(
+          gt(encounters.visibleUntil, new Date()),
+          eq(encounterParticipants.userId, viewerId),
+          sql`exists(select 1 from encounter_participants ep where ep.encounter_id=${encounters.id} and ep.user_id=${p.userId})`,
+        ),
+      )
+      .limit(1)
     return serializeProfile(
       p,
       privacy?.isPrivate ?? false,
-      viewerId === p.userId ? null : new Map(vis.map((v) => [v.field, v.audience])),
+      viewerId === p.userId
+        ? null
+        : new Map(vis.map((v) => [v.field, v.audience])),
+      friend ? 'friends' : recent ? 'encounters' : 'everyone',
     )
   }
   async avatarOwner(viewerId: string, username: string) {
     const projected = await this.profile(viewerId, username)
-    if (!projected.avatarUrl) throw new DomainError('not_found', 'Avatar unavailable', 404)
+    if (!projected.avatarUrl)
+      throw new DomainError('not_found', 'Avatar unavailable', 404)
     const [owner] = await this.db
       .select({ userId: profiles.userId })
       .from(profiles)
@@ -365,8 +486,17 @@ function serializeProfile(
   p: typeof profiles.$inferSelect,
   isPrivate: boolean,
   visibility: Map<string, string> | null,
+  relationship: 'everyone' | 'encounters' | 'friends' = 'everyone',
 ) {
-  const allowed = (f: string) => !visibility || visibility.get(f) === 'everyone'
+  const allowed = (f: string) => {
+    if (!visibility) return true
+    const audience = visibility.get(f)
+    return (
+      audience === 'everyone' ||
+      (audience === 'encounters' && relationship !== 'everyone') ||
+      (audience === 'friends' && relationship === 'friends')
+    )
+  }
   return {
     username: p.username,
     displayName: p.displayName,

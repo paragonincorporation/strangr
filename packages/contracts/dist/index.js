@@ -61,7 +61,12 @@ export const accountStateSchema = z.enum([
     'deleted',
 ]);
 export const ageCohortSchema = z.enum(['minor_16_17', 'adult_18_plus']);
-export const visibilityAudienceSchema = z.enum(['everyone', 'encounters', 'friends', 'only_me']);
+export const visibilityAudienceSchema = z.enum([
+    'everyone',
+    'encounters',
+    'friends',
+    'only_me',
+]);
 export const profileFieldSchema = z.enum([
     'avatar',
     'bio',
@@ -160,6 +165,48 @@ export const realtimeTicketResponseSchema = z.object({
     expiresAt: timestampSchema,
 });
 export const matchModeSchema = z.enum(['text', 'video']);
+export const blockReasonSchema = z.enum([
+    'safety',
+    'harassment',
+    'spam',
+    'other',
+]);
+export const blockCreateRequestSchema = z.object({
+    userId: internalIdSchema,
+    reasonCategory: blockReasonSchema,
+});
+export const friendRequestCreateSchema = z.object({
+    userId: internalIdSchema,
+    encounterId: internalIdSchema,
+});
+export const friendRequestActionSchema = z.object({
+    action: z.enum(['accept', 'reject', 'cancel']),
+});
+export const muteRequestSchema = z.object({
+    scope: z.enum(['all', 'messages', 'calls']).default('all'),
+    expiresAt: timestampSchema.optional(),
+});
+export const encounterSchema = z.object({
+    id: internalIdSchema,
+    mode: matchModeSchema,
+    startedAt: timestampSchema,
+    endedAt: timestampSchema.nullable(),
+    otherUser: z.object({
+        id: internalIdSchema,
+        username: z.string(),
+        displayName: z.string(),
+        avatarAvailable: z.boolean(),
+    }),
+    friendshipState: z.literal('none'),
+    requestState: z.literal('none'),
+    hidden: z.boolean(),
+    reported: z.boolean(),
+    blocked: z.boolean(),
+});
+export const encounterListResponseSchema = z.object({
+    items: z.array(encounterSchema),
+    nextCursor: cursorSchema.nullable(),
+});
 export const matchJoinRequestSchema = z.object({
     mode: matchModeSchema,
     allowPreferenceRelaxation: z.boolean().default(false),
@@ -198,14 +245,19 @@ export const avatarUploadInitResponseSchema = z.object({
     uploadUrl: z.string().min(1),
     expiresAt: timestampSchema,
 });
-export const avatarUploadFinalizeRequestSchema = z.object({ uploadId: internalIdSchema });
+export const avatarUploadFinalizeRequestSchema = z.object({
+    uploadId: internalIdSchema,
+});
 export const avatarResponseSchema = z.object({ avatarUrl: z.string().min(1) });
 const connectionReadyPayloadSchema = z.object({
     protocolVersion: z.literal(PROTOCOL_VERSION),
     connectionId: internalIdSchema,
 });
 const connectionPingPayloadSchema = z.object({ sentAt: timestampSchema });
-const errorPayloadSchema = z.object({ code: errorCodeSchema, message: z.string().min(1).max(500) });
+const errorPayloadSchema = z.object({
+    code: errorCodeSchema,
+    message: z.string().min(1).max(500),
+});
 const matchIdPayloadSchema = z.object({ matchId: internalIdSchema });
 const matchJoinPayloadSchema = matchJoinRequestSchema;
 const rtcDescriptionPayloadSchema = matchIdPayloadSchema.extend({
@@ -285,6 +337,12 @@ export const clientRealtimeEnvelopeSchema = z.discriminatedUnion('type', [
 export const serverRealtimeEnvelopeSchema = z.discriminatedUnion('type', [
     z.object({
         version: z.literal(PROTOCOL_VERSION),
+        type: z.literal('presence.changed'),
+        requestId: requestIdSchema,
+        payload: z.object({ userId: internalIdSchema, online: z.boolean() }),
+    }),
+    z.object({
+        version: z.literal(PROTOCOL_VERSION),
         type: z.literal('connection.ready'),
         requestId: requestIdSchema,
         payload: connectionReadyPayloadSchema,
@@ -330,7 +388,14 @@ export const serverRealtimeEnvelopeSchema = z.discriminatedUnion('type', [
         type: z.literal('match.ended'),
         requestId: requestIdSchema,
         payload: matchIdPayloadSchema.extend({
-            reason: z.enum(['left', 'next', 'peer_left', 'ack_timeout', 'disconnected', 'blocked']),
+            reason: z.enum([
+                'left',
+                'next',
+                'peer_left',
+                'ack_timeout',
+                'disconnected',
+                'blocked',
+            ]),
         }),
     }),
     z.object({
@@ -390,7 +455,14 @@ function utf8ByteLength(input) {
     let bytes = 0;
     for (const character of input) {
         const codePoint = character.codePointAt(0) ?? 0;
-        bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
+        bytes +=
+            codePoint <= 0x7f
+                ? 1
+                : codePoint <= 0x7ff
+                    ? 2
+                    : codePoint <= 0xffff
+                        ? 3
+                        : 4;
     }
     return bytes;
 }
@@ -403,7 +475,10 @@ export function parseClientRealtimeMessage(input) {
         const parsed = clientRealtimeEnvelopeSchema.safeParse(decoded);
         return parsed.success
             ? parsed
-            : { success: false, error: 'unknown_or_invalid_command' };
+            : {
+                success: false,
+                error: 'unknown_or_invalid_command',
+            };
     }
     catch {
         return { success: false, error: 'malformed_json' };

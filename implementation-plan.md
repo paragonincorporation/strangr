@@ -150,7 +150,11 @@ Execution status as of July 12, 2026:
 | 10    | Complete    | Atomic cohort/mode Redis queues, eligibility rechecks, match leases/acks, recent-pair exclusion, next cleanup, and multi-instance delivery                                  |
 | 11    | Complete    | Typed React session/media lifecycle, validated WebRTC relay, short-lived TURN credentials, sequenced random text, reconnect, and teardown                                   |
 | 11A   | Complete    | Separate Vercel web/admin deployments, Render API/cron/Key Value Blueprint, exact origin enforcement, and deployment runbook                                                |
-| 12–28 | Not started | Unit 12 is the next implementation unit; execute in the order below                                                                                                         |
+| 12    | Complete    | Durable encounters, random text, metadata-only calls, privacy-projected 48-hour history, and leased retention with minimal evidence copies                                  |
+| 13    | Complete    | Persistent contact denial, block APIs/UI, queue/live-contact termination, generic revocation, and profile/history/realtime enforcement                                      |
+| 14    | Complete    | Encounter-gated requests, canonical friendships/direct threads, mutes, counts, concurrency-safe consent, and request retention                                              |
+| 15    | Complete    | History/friends/requests/profile journeys, exact discovery, privacy-aware projections, bounded pagination, and friend-only leased presence                                  |
+| 16–28 | Not started | P1 is complete; Unit 16 is the next implementation unit                                                                                                                      |
 
 | Priority | Units | Outcome                                                                               |
 | -------- | ----- | ------------------------------------------------------------------------------------- |
@@ -921,8 +925,8 @@ If a unit cannot meet these conditions because of an open legal/product/vendor d
 ## 9. Implementation progress and next-agent handoff
 
 Last updated: July 12, 2026  
-Completed scope: Units 0–11A
-Next scheduled unit: Unit 12 — Persist encounters, random messages, call metadata, and retention
+Completed scope: Units 0–15 (P0 and P1 complete)
+Next scheduled unit: Unit 16 — Implement persistent friend messaging
 
 ### Important repository state
 
@@ -930,17 +934,19 @@ The repository had a clean tracked baseline before Unit 11A deployment work bega
 
 ### Unit completion summary
 
-| Unit | Status   | Main evidence                                                                                                                                                                                                       |
-| ---- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | Complete | `docs/architecture/prototype-baseline.md`, ADRs 0001–0007, `docs/architecture/open-decisions.md`, and prototype reference screenshots                                                                               |
-| 1    | Complete | npm workspace skeleton, one-port Fastify/`ws` foundation, worker, Compose services, root development orchestration, and `docs/architecture/unit-01-foundation.md`                                                   |
-| 2    | Complete | strict shared TypeScript, ESLint/Prettier, Vitest/Testing Library/Playwright, integration configuration, CI and security checks, and `docs/architecture/unit-02-quality-foundation.md`                              |
-| 3    | Complete | shared UI tokens/primitives, routed React user/admin shells, responsive conversation safety states, tests, and `docs/architecture/unit-03-react-shells.md`                                                          |
-| 4    | Complete | Zod transport contracts, validated server/client configuration, versioned WebSocket validation, local OpenAPI, client secret-bundle check, and `docs/architecture/unit-04-contracts-and-config.md`                  |
-| 5    | Complete | Drizzle schema/migration, identity/profile repositories, account-state domain validation, field encryption, database integration tests, local migration/reset workflow, and `docs/architecture/unit-05-database.md` |
-| 6–8  | Complete | Supabase identity, onboarding/profile/privacy, safe avatar pipeline, and `docs/architecture/unit-06-08-identity-profile-assets.md`                                                                                  |
-| 9–11 | Complete | Authenticated Redis realtime, cohort-safe matching, random text/video/WebRTC loop, and `docs/architecture/unit-09-11-realtime-matching-webrtc.md`                                                                   |
-| 11A  | Complete | Vercel frontend projects, Render backend Blueprint, exact HTTP/WebSocket origin policy, bounded maintenance mode, and `docs/architecture/unit-11a-deployment-foundation.md`                                         |
+| Unit  | Status   | Main evidence                                                                                                                                                                                                       |
+| ----- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | Complete | `docs/architecture/prototype-baseline.md`, ADRs 0001–0007, `docs/architecture/open-decisions.md`, and prototype reference screenshots                                                                               |
+| 1     | Complete | npm workspace skeleton, one-port Fastify/`ws` foundation, worker, Compose services, root development orchestration, and `docs/architecture/unit-01-foundation.md`                                                   |
+| 2     | Complete | strict shared TypeScript, ESLint/Prettier, Vitest/Testing Library/Playwright, integration configuration, CI and security checks, and `docs/architecture/unit-02-quality-foundation.md`                              |
+| 3     | Complete | shared UI tokens/primitives, routed React user/admin shells, responsive conversation safety states, tests, and `docs/architecture/unit-03-react-shells.md`                                                          |
+| 4     | Complete | Zod transport contracts, validated server/client configuration, versioned WebSocket validation, local OpenAPI, client secret-bundle check, and `docs/architecture/unit-04-contracts-and-config.md`                  |
+| 5     | Complete | Drizzle schema/migration, identity/profile repositories, account-state domain validation, field encryption, database integration tests, local migration/reset workflow, and `docs/architecture/unit-05-database.md` |
+| 6–8   | Complete | Supabase identity, onboarding/profile/privacy, safe avatar pipeline, and `docs/architecture/unit-06-08-identity-profile-assets.md`                                                                                  |
+| 9–11  | Complete | Authenticated Redis realtime, cohort-safe matching, random text/video/WebRTC loop, and `docs/architecture/unit-09-11-realtime-matching-webrtc.md`                                                                   |
+| 11A   | Complete | Vercel frontend projects, Render backend Blueprint, exact HTTP/WebSocket origin policy, bounded maintenance mode, and `docs/architecture/unit-11a-deployment-foundation.md`                                         |
+| 12–13 | Complete | Durable encounters/random text, metadata-only calls, retention/evidence worker, persistent cross-domain blocks, history/live-block UI, and `docs/architecture/unit-12-13-encounters-blocks.md`                      |
+| 14–15 | Complete | Encounter-gated mutual friendships, request retention, mutes/counts, exact discovery, privacy projections, friend presence and complete P1 UI in `docs/architecture/unit-14-15-friends-discovery-presence.md`       |
 
 ### Current Unit 4 boundary
 
@@ -993,8 +999,8 @@ Database integration coverage includes encrypted birth-date storage/public omiss
 
 The local Compose Postgres and Redis containers were healthy during verification. Their continued availability must not be assumed by a later agent; check them before integration work.
 
-### Exact starting point for Unit 12
+### Exact starting point for Unit 16
 
-Unit 12 should add durable encounter, random-message, and metadata-only call records without moving ephemeral queue/presence ownership out of Redis. Persist the accepted match result idempotently, retain user-visible encounter and random-text data for no more than 48 hours, store no audio/video/SDP/ICE, and add a leased retention worker with report-evidence holds. Reuse the current UUID match ID and server sequence as idempotency/order boundaries.
+Unit 16 should implement persistent messages only inside the direct threads created by `FriendRepository`. Every send/read/delete operation must recheck an active friendship and `BlockRepository.hasEitherDirection`; unfriend and block deny new messages immediately. Do not reuse or promote random encounter threads.
 
-Units 13 and 20 must replace the current deny-capable block/sanction adapter boundary with persistent repository checks. Until then, cohort isolation, account/session capability checks, mode partitions, recent-pair exclusion, leases, and client-independent server authorization remain mandatory.
+Request counts currently return `unreadMessages: 0`; Unit 16 must replace that placeholder with server-calculated unread state. Existing direct threads intentionally survive unfriend for later retention/deletion policy, but remain inaccessible for new contact. Unit 20 must apply the persistent block adapter to sanctions.
