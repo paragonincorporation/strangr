@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#09090b">
+    <meta name="description" content="Strangr is instant, anonymous peer-to-peer video chat. No signup. No profile. Just talk.">
+    <title>Strangr — Meet someone random</title>
+    <link rel="stylesheet" href="/styles/tokens.css">
+    <link rel="stylesheet" href="/styles/base.css">
+    <link rel="stylesheet" href="/styles/layout.css">
+    <link rel="stylesheet" href="/styles/components.css">
+    <link rel="stylesheet" href="/styles/motion.css">
+    <script src="/runtime-env.js"></script>
+    <script type="module" src="/js/app.js"></script>
+  </head>
+  <body>
+    <div class="ambient" aria-hidden="true">
+      <span class="ambient__slab ambient__slab--one"></span>
+      <span class="ambient__slab ambient__slab--two"></span>
+      <span class="ambient__dot"></span>
+    </div>
+
+    <header class="site-header">
+      <button class="wordmark" type="button" data-action="home" aria-label="Strangr home">
+        STRANG<span>R</span><i>.</i>
+      </button>
+      <div class="header-note">
+        <span class="header-note__dot"></span>
+        No profile. No trail.
+      </div>
+    </header>
+
+    <main id="app" class="app-shell">
+      <section class="landing view is-active" data-view="landing" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span>01</span> ONE CLICK. SOMEONE NEW.</p>
+          <h1 id="hero-title">MEET A<br><em>STRANGR.</em></h1>
+          <p class="hero-copy__lede">Drop in. Talk it out. Leave no trace.</p>
+          <div class="hero-actions">
+            <button class="button button--primary button--hero" type="button" data-action="open-gate">
+              <span>Start chatting</span>
+              <b aria-hidden="true">↗</b>
+            </button>
+            <button class="text-link" type="button" data-action="open-how">How it works <span>→</span></button>
+          </div>
+        </div>
+
+        <div class="hero-art" aria-hidden="true">
+          <div class="hero-card hero-card--back"><span>ANYWHERE</span><strong>02:14</strong></div>
+          <div class="hero-card hero-card--front">
+            <div class="hero-card__top"><span class="status-dot"></span><b>LIVE CONNECTION</b></div>
+            <div class="face-mark"><span>?</span></div>
+            <p>YOU HAVEN'T MET YET.</p>
+          </div>
+          <div class="hero-sticker">NO<br>SMALL<br>TALK?</div>
+        </div>
+
+        <div class="trust-row" aria-label="Strangr principles">
+          <span>Anonymous</span><i></i><span>Instant</span><i></i><span>Private</span><i></i><span>No signup</span>
+        </div>
+      </section>
+
+      <section class="matching view" data-view="matching" aria-labelledby="matching-title">
+        <div class="matching-card glass-panel">
+          <div class="signal-field" aria-hidden="true">
+            <span class="signal-ring signal-ring--one"></span>
+            <span class="signal-ring signal-ring--two"></span>
+            <span class="signal-ring signal-ring--three"></span>
+            <strong>?</strong>
+          </div>
+          <p class="eyebrow"><span data-match-step-number>02</span> LIVE SEARCH</p>
+          <h2 id="matching-title">FINDING YOUR<br><em>STRANGR</em></h2>
+          <p class="matching-status" data-match-status>Opening a private channel</p>
+          <div class="match-meter" aria-hidden="true"><span data-match-meter></span></div>
+          <div class="matching-meta">
+            <span><b data-wait-time>00:00</b> elapsed</span>
+            <span data-match-mode>Video ready</span>
+          </div>
+          <button class="button button--quiet" type="button" data-action="cancel-match">Cancel search</button>
+        </div>
+      </section>
+
+      <section class="room view" data-view="room" aria-label="Chat room">
+        <div class="room-stage">
+          <div class="video-frame video-frame--remote">
+            <video data-remote-video autoplay playsinline></video>
+            <div class="video-empty" data-remote-empty>
+              <span>?</span>
+              <strong data-remote-label>Connecting stranger</strong>
+            </div>
+            <div class="video-label"><span>STRANGR</span><b data-peer-media>CAMERA ON</b></div>
+          </div>
+
+          <div class="video-frame video-frame--local">
+            <video data-local-video autoplay playsinline muted></video>
+            <div class="video-empty video-empty--local" data-local-empty><span>YOU</span></div>
+            <div class="video-label"><span>YOU</span><b data-local-media>LIVE</b></div>
+          </div>
+
+          <div class="connection-pill" data-connection-pill data-tone="waiting">
+            <span></span><b data-connection-label>Connecting</b>
+          </div>
+
+          <div class="room-notice glass-panel" data-room-notice hidden>
+            <p class="eyebrow">CONNECTION SHIFT</p>
+            <h2 data-notice-title>STRANGR DROPPED.</h2>
+            <p data-notice-copy>Their signal is shaky. Wait here or move on now.</p>
+            <div class="notice-actions">
+              <button class="button button--primary" type="button" data-action="notice-wait">Keep waiting</button>
+              <button class="button button--quiet" type="button" data-action="next">Skip now</button>
+            </div>
+            <small data-reconnect-countdown></small>
+          </div>
+        </div>
+
+        <aside class="chat-panel glass-panel" data-chat-panel aria-label="Text chat">
+          <div class="chat-panel__header">
+            <div><span class="eyebrow">SIDE CHANNEL</span><h2>CHAT</h2></div>
+            <button class="icon-button" type="button" data-action="toggle-chat" aria-label="Close chat">×</button>
+          </div>
+          <div class="chat-messages" data-chat-messages aria-live="polite">
+            <p class="system-message">You’re connected. Say something real.</p>
+          </div>
+          <p class="typing-note" data-typing hidden>Strangr is typing…</p>
+          <form class="chat-compose" data-chat-form>
+            <label class="sr-only" for="chat-input">Message</label>
+            <input id="chat-input" data-chat-input maxlength="500" autocomplete="off" placeholder="Type it. Send it.">
+            <button type="submit" aria-label="Send message">↑</button>
+          </form>
+        </aside>
+
+        <nav class="control-dock glass-panel" aria-label="Call controls">
+          <button type="button" data-action="toggle-audio" aria-pressed="false"><span>MIC</span><b data-audio-label>ON</b></button>
+          <button type="button" data-action="toggle-video" aria-pressed="false"><span>CAM</span><b data-video-label>ON</b></button>
+          <button class="control-dock__next" type="button" data-action="next"><span>NEXT</span><b>↗</b></button>
+          <button type="button" data-action="toggle-chat" aria-expanded="true"><span>TEXT</span><b data-chat-count>OPEN</b></button>
+          <button type="button" data-action="open-report"><span>FLAG</span><b>REPORT</b></button>
+          <button class="control-dock__end" type="button" data-action="end"><span>END</span><b>×</b></button>
+        </nav>
+      </section>
+
+      <section class="ended view" data-view="ended" aria-labelledby="ended-title">
+        <div class="ended-card glass-panel">
+          <p class="eyebrow"><span>00</span> SESSION CLOSED</p>
+          <h2 id="ended-title">THAT’S<br><em>A WRAP.</em></h2>
+          <p data-ended-copy>No history. No awkward goodbye.</p>
+          <button class="button button--primary" type="button" data-action="restart">Meet someone else</button>
+          <button class="text-link" type="button" data-action="home">Back home</button>
+        </div>
+      </section>
+    </main>
+
+    <dialog class="modal modal--gate" data-modal="gate">
+      <form method="dialog" class="modal-card glass-panel" data-gate-form>
+        <button class="modal-close" type="button" data-action="close-gate" aria-label="Close">×</button>
+        <p class="eyebrow"><span>18+</span> QUICK CHECK</p>
+        <h2>BE COOL.<br>BE HUMAN.</h2>
+        <label class="consent-check">
+          <input type="checkbox" data-consent>
+          <span aria-hidden="true">✓</span>
+          <b>I’m 18+ and agree to the <button type="button" data-action="open-guidelines">community guidelines</button>.</b>
+        </label>
+        <button class="button button--primary" type="submit" value="default" data-action="accept-gate" disabled>
+          Enter Strangr <span>↗</span>
+        </button>
+        <small>Camera and mic are requested after this step. If blocked, we switch to text.</small>
+      </form>
+    </dialog>
+
+    <dialog class="modal" data-modal="guidelines">
+      <div class="modal-card glass-panel">
+        <button class="modal-close" type="button" data-action="close-guidelines" aria-label="Close">×</button>
+        <p class="eyebrow">COMMUNITY GUIDELINES</p>
+        <h2>DON’T BE THE WORST.</h2>
+        <p class="modal-copy">Strangr is for consenting adults. No nudity, sexual harassment, hate, threats, scams, illegal content, or sharing anyone’s private information. Leave and report anything unsafe. You are responsible for what you say and show.</p>
+        <button class="button button--quiet" type="button" data-action="close-guidelines">Got it</button>
+      </div>
+    </dialog>
+
+    <dialog class="modal" data-modal="how">
+      <div class="modal-card modal-card--wide glass-panel">
+        <button class="modal-close" type="button" data-action="close-how" aria-label="Close">×</button>
+        <p class="eyebrow">HOW IT WORKS</p>
+        <h2>FAST IN.<br>CLEAN OUT.</h2>
+        <ol class="steps-list">
+          <li><b>01</b><span><strong>Say yes</strong>Confirm you’re 18+ and keep it respectful.</span></li>
+          <li><b>02</b><span><strong>Go live</strong>We pair you with one random person. No profile.</span></li>
+          <li><b>03</b><span><strong>Move on</strong>Next, report, or leave whenever you want.</span></li>
+        </ol>
+      </div>
+    </dialog>
+
+    <dialog class="modal" data-modal="report">
+      <form class="modal-card glass-panel" data-report-form>
+        <button class="modal-close" type="button" data-action="close-report" aria-label="Close">×</button>
+        <p class="eyebrow">REPORT STRANGR</p>
+        <h2>WHAT HAPPENED?</h2>
+        <label class="field-label" for="report-reason">Reason</label>
+        <select id="report-reason" data-report-reason required>
+          <option value="">Choose one</option>
+          <option value="harassment">Harassment</option>
+          <option value="sexual-content">Sexual content</option>
+          <option value="hate-or-abuse">Hate or abuse</option>
+          <option value="spam-or-scam">Spam or scam</option>
+          <option value="underage-concern">Underage concern</option>
+          <option value="other">Other</option>
+        </select>
+        <label class="field-label" for="report-note">Note <span>optional</span></label>
+        <textarea id="report-note" data-report-note maxlength="500" placeholder="Keep it short. Don’t include private info."></textarea>
+        <p class="form-error" data-report-error hidden></p>
+        <button class="button button--danger" type="submit">Report &amp; move on</button>
+        <small>We log the reason, this note, and at most the latest short text snippet. Never video or audio.</small>
+      </form>
+    </dialog>
+
+    <div class="toast" data-toast role="status" aria-live="polite" hidden></div>
+  </body>
+</html>

@@ -1,0 +1,52 @@
+import { z } from 'zod';
+declare const commonServerSchema: z.ZodObject<{
+    NODE_ENV: z.ZodDefault<z.ZodEnum<{
+        development: "development";
+        test: "test";
+        production: "production";
+    }>>;
+    API_HOST: z.ZodDefault<z.ZodString>;
+    API_PORT: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
+    LOG_LEVEL: z.ZodDefault<z.ZodEnum<{
+        error: "error";
+        fatal: "fatal";
+        warn: "warn";
+        info: "info";
+        debug: "debug";
+        trace: "trace";
+        silent: "silent";
+    }>>;
+    DATABASE_URL: z.ZodString;
+    REDIS_URL: z.ZodString;
+    SUPABASE_URL: z.ZodURL;
+    SUPABASE_JWT_ISSUER: z.ZodURL;
+    SUPABASE_JWT_AUDIENCE: z.ZodString;
+    SUPABASE_JWKS_URL: z.ZodURL;
+    SUPABASE_STORAGE_BUCKET: z.ZodString;
+    SUPABASE_SERVICE_ROLE_KEY: z.ZodString;
+    CURRENT_TERMS_VERSION: z.ZodString;
+    CURRENT_GUIDELINES_VERSION: z.ZodString;
+    BIRTH_DATE_KEY_ID: z.ZodString;
+    BIRTH_DATE_ENCRYPTION_KEY: z.ZodString;
+    TURN_URLS: z.ZodString;
+    TURN_CREDENTIAL_SECRET: z.ZodString;
+    STRIPE_SECRET_KEY: z.ZodString;
+    STRIPE_WEBHOOK_SECRET: z.ZodString;
+    DEPLOYMENT_ENVIRONMENT: z.ZodString;
+    DEPLOYMENT_REVISION: z.ZodString;
+    OPENAPI_ENABLED: z.ZodPipe<z.ZodDefault<z.ZodEnum<{
+        true: "true";
+        false: "false";
+    }>>, z.ZodTransform<boolean, "true" | "false">>;
+}, z.core.$strip>;
+export type ServerConfig = z.infer<typeof commonServerSchema>;
+export declare function parseServerConfig(environment: Record<string, string | undefined>): ServerConfig;
+export declare const clientPublicConfigSchema: z.ZodObject<{
+    VITE_API_URL: z.ZodURL;
+    VITE_SUPABASE_URL: z.ZodURL;
+    VITE_SUPABASE_ANON_KEY: z.ZodString;
+    VITE_DEPLOYMENT_ENVIRONMENT: z.ZodString;
+}, z.core.$strip>;
+export type ClientPublicConfig = z.infer<typeof clientPublicConfigSchema>;
+export declare function parseClientPublicConfig(environment: Record<string, unknown>): ClientPublicConfig;
+export {};

@@ -1,0 +1,28 @@
+.button, .text-link, .icon-button, .modal-close, .control-dock button, .chat-panel {
+  transition: transform var(--duration-fast) var(--ease-snap), box-shadow var(--duration-fast) ease, background-color var(--duration-fast) ease, border-color var(--duration-fast) ease, opacity var(--duration-fast) ease;
+}
+
+.button:hover:not(:disabled), .text-link:hover, .icon-button:hover, .modal-close:hover { transform: translateY(-2px); }
+.button:active:not(:disabled), .text-link:active, .icon-button:active, .modal-close:active, .control-dock button:active { transform: scale(0.96); }
+
+.view.is-entering { animation: view-in var(--duration-medium) var(--ease-snap) both; }
+.hero-card--front { animation: card-settle 700ms var(--ease-snap) both; }
+.hero-card--back { animation: card-settle-back 820ms var(--ease-snap) both; }
+.hero-sticker { animation: sticker-pop 680ms var(--ease-snap) both; }
+.signal-ring--one { animation: signal-pulse 1.15s ease-out infinite; }
+.signal-ring--two { animation: signal-pulse 1.15s 180ms ease-out infinite; }
+.signal-ring--three { animation: signal-pulse 1.15s 360ms ease-out infinite; }
+.match-meter span { animation: meter-scan 1.1s var(--ease-snap) infinite alternate; }
+.room.is-match-hit .video-frame--remote { animation: match-hit 360ms var(--ease-snap); }
+
+@keyframes view-in { from { opacity: 0; transform: translateY(8px) scale(0.99); } to { opacity: 1; transform: none; } }
+@keyframes card-settle { from { opacity: 0; transform: translate(20px, 28px) rotate(4deg); } to { opacity: 1; transform: rotate(-3deg); } }
+@keyframes card-settle-back { from { opacity: 0; transform: translate(35px, -15px) rotate(14deg); } to { opacity: 1; transform: rotate(8deg); } }
+@keyframes sticker-pop { from { opacity: 0; transform: scale(0.4) rotate(-12deg); } to { opacity: 1; transform: scale(1) rotate(10deg); } }
+@keyframes signal-pulse { 0% { transform: scale(0.6); opacity: 0.55; } 100% { transform: scale(1.08); opacity: 0; } }
+@keyframes meter-scan { from { transform: translateX(-10%); } to { transform: translateX(325%); } }
+@keyframes match-hit { 0% { transform: scale(0.985); box-shadow: 0 0 0 1px var(--color-accent); } 65% { transform: scale(1.006); box-shadow: 0 0 50px rgba(123,44,255,0.5); } 100% { transform: none; box-shadow: var(--shadow-panel); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 1ms !important; }
+}
