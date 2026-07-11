@@ -2,6 +2,7 @@ import { createHmac, randomUUID } from 'node:crypto'
 import type { IncomingMessage } from 'node:http'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
+import cors from '@fastify/cors'
 import { parseServerConfig, type ServerConfig } from '@strangr/config'
 import {
   avatarUploadFinalizeRequestSchema,
@@ -56,6 +57,13 @@ export interface CreateAppOptions {
 export function createApp(options: CreateAppOptions = {}) {
   const config = options.config ?? parseServerConfig(process.env)
   const app = Fastify({ logger: { level: config.LOG_LEVEL } })
+  const allowedOrigins = new Set([
+    ...config.WEB_ALLOWED_ORIGINS,
+    ...config.ADMIN_ALLOWED_ORIGINS,
+    ...config.PREVIEW_ALLOWED_ORIGINS,
+  ])
+  const originAllowed = (origin: string | undefined) =>
+    origin === undefined ? config.NODE_ENV !== 'production' : allowedOrigins.has(origin)
   const connection =
     options.accounts && options.avatars ? null : createDatabase(config.DATABASE_URL)
   const encryptor = createAesGcmFieldEncryptor(
@@ -92,7 +100,17 @@ export function createApp(options: CreateAppOptions = {}) {
     })
   })
 
-  void app.register(swagger, { openapi: { info: { title: 'Strangr API', version: '1.0.0' } } })
+  void app.register(swagger, {
+    openapi: { info: { title: 'Strangr API', version: '1.0.0' } },
+  })
+  void app.register(cors, {
+    origin(origin, callback) {
+      callback(null, originAllowed(origin))
+    },
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['authorization', 'content-type', 'x-device-label'],
+    maxAge: 600,
+  })
   if (config.OPENAPI_ENABLED && config.NODE_ENV !== 'production')
     void app.register(swaggerUi, { routePrefix: '/documentation' })
 
@@ -113,7 +131,11 @@ export function createApp(options: CreateAppOptions = {}) {
       )
       request.auth = {
         identity,
-        user: { id: user.id, accountState: user.accountState, emailVerified: user.emailVerified },
+        user: {
+          id: user.id,
+          accountState: user.accountState,
+          emailVerified: user.emailVerified,
+        },
       }
     } catch {
       return reply
@@ -219,7 +241,11 @@ export function createApp(options: CreateAppOptions = {}) {
         .digest('base64')
       return {
         iceServers: [
-          { urls: config.TURN_URLS.split(',').map((x) => x.trim()), username, credential },
+          {
+            urls: config.TURN_URLS.split(',').map((x) => x.trim()),
+            username,
+            credential,
+          },
         ],
         expiresAt: new Date(expires * 1000).toISOString(),
       }
@@ -425,6 +451,11 @@ export function createApp(options: CreateAppOptions = {}) {
       socket.destroy()
       return
     }
+    if (!originAllowed(request.headers.origin)) {
+      socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
+      socket.destroy()
+      return
+    }
     const ticket = url.searchParams.get('ticket')
     if (!ticket) {
       socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n')
@@ -459,7 +490,10 @@ export function createApp(options: CreateAppOptions = {}) {
   return app
 }
 
-type Outbound = { userId: string; event: z.infer<typeof serverRealtimeEnvelopeSchema> }
+type Outbound = {
+  userId: string
+  event: z.infer<typeof serverRealtimeEnvelopeSchema>
+}
 async function publishMatch(
   realtime: RedisRealtimeStore,
   match: Awaited<ReturnType<RedisRealtimeStore['getMatch']>> & {},
@@ -568,7 +602,12 @@ async function handleRealtime(
           version: PROTOCOL_VERSION,
           type: 'chat.message',
           requestId: event.requestId,
-          payload: { ...event.payload, sequence, senderId: identity.userId, sentAt },
+          payload: {
+            ...event.payload,
+            sequence,
+            senderId: identity.userId,
+            sentAt,
+          },
         },
       },
       {
@@ -577,7 +616,11 @@ async function handleRealtime(
           version: PROTOCOL_VERSION,
           type: 'chat.ack',
           requestId: event.requestId,
-          payload: { matchId: match.id, clientMessageId: event.payload.clientMessageId, sequence },
+          payload: {
+            matchId: match.id,
+            clientMessageId: event.payload.clientMessageId,
+            sequence,
+          },
         },
       },
     ]
@@ -591,7 +634,9 @@ function error(
   requestId: string,
   details?: Record<string, unknown>,
 ) {
-  return { error: { code, message, requestId, ...(details ? { details } : {}) } }
+  return {
+    error: { code, message, requestId, ...(details ? { details } : {}) },
+  }
 }
 function domainReply(reply: FastifyReply, requestId: string, cause: unknown) {
   if (cause instanceof DomainError)

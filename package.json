@@ -2,6 +2,7 @@
   "name": "strangr",
   "private": true,
   "version": "0.0.0",
+  "packageManager": "npm@10.9.3",
   "type": "module",
   "description": "Account-based social discovery over text and video.",
   "workspaces": [
@@ -15,6 +16,10 @@
     "db:migrate": "npm run db:migrate --workspace @strangr/database",
     "db:reset": "node scripts/reset-local-database.mjs",
     "build": "npm run build --workspace @strangr/contracts && npm run build --workspace @strangr/config && npm run build --workspace @strangr/database && npm run build --workspace @strangr/ui && npm run build --workspace @strangr/api && npm run build --workspace @strangr/web && npm run build --workspace @strangr/admin && npm run client-secrets:check",
+    "build:web": "npm run build --workspace @strangr/contracts && npm run build --workspace @strangr/ui && npm run build --workspace @strangr/web && npm run client-secrets:check",
+    "build:admin": "npm run build --workspace @strangr/ui && npm run build --workspace @strangr/admin && npm run client-secrets:check",
+    "build:api": "npm run build --workspace @strangr/contracts && npm run build --workspace @strangr/config && npm run build --workspace @strangr/database && npm run build --workspace @strangr/api",
+    "build:worker": "npm run build:api",
     "lint": "eslint scripts tests eslint.config.js playwright.config.ts vitest.integration.config.ts --max-warnings 0 && npm run lint --workspaces --if-present",
     "format": "prettier --write . --ignore-unknown",
     "format:check": "prettier --check . --ignore-unknown",
@@ -30,6 +35,7 @@
     "test:legacy": "node --test 'test/**/*.test.js'",
     "start": "npm run start --workspace @strangr/api",
     "start:worker": "npm run start:worker --workspace @strangr/api",
+    "worker:once": "npm run worker:once --workspace @strangr/api",
     "legacy:dev": "nodemon server/index.js",
     "legacy:start": "node server/index.js",
     "legacy:test": "node --test 'test/**/*.test.js'"

@@ -11,11 +11,13 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/server.js",
-    "start:worker": "node dist/worker.js"
+    "start:worker": "node dist/worker.js",
+    "worker:once": "node dist/worker.js --once"
   },
   "dependencies": {
     "@fastify/swagger": "^9.8.0",
     "@fastify/swagger-ui": "^6.1.0",
+    "@fastify/cors": "^11.1.0",
     "@strangr/config": "^0.0.0",
     "@strangr/contracts": "^0.0.0",
     "@supabase/supabase-js": "^2.110.2",

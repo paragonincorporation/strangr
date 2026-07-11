@@ -7,6 +7,9 @@ declare const commonServerSchema: z.ZodObject<{
     }>>;
     API_HOST: z.ZodDefault<z.ZodString>;
     API_PORT: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
+    WEB_ALLOWED_ORIGINS: z.ZodPipe<z.ZodPipe<z.ZodString, z.ZodTransform<string[], string>>, z.ZodArray<z.ZodURL>>;
+    ADMIN_ALLOWED_ORIGINS: z.ZodPipe<z.ZodPipe<z.ZodString, z.ZodTransform<string[], string>>, z.ZodArray<z.ZodURL>>;
+    PREVIEW_ALLOWED_ORIGINS: z.ZodPipe<z.ZodPipe<z.ZodDefault<z.ZodString>, z.ZodTransform<string[], string>>, z.ZodArray<z.ZodURL>>;
     LOG_LEVEL: z.ZodDefault<z.ZodEnum<{
         error: "error";
         fatal: "fatal";

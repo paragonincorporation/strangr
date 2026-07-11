@@ -1,0 +1,129 @@
+services:
+  - type: web
+    name: strangr-api
+    runtime: node
+    region: singapore
+    plan: free
+    buildCommand: npm ci && npm run build:api
+    startCommand: npm start
+    healthCheckPath: /health/ready
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: 22.19.0
+      - key: NODE_ENV
+        value: production
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: strangr-realtime
+          property: connectionString
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_ISSUER
+        sync: false
+      - key: SUPABASE_JWT_AUDIENCE
+        value: authenticated
+      - key: SUPABASE_JWKS_URL
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: avatars
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CURRENT_TERMS_VERSION
+        value: beta-2026-07
+      - key: CURRENT_GUIDELINES_VERSION
+        value: beta-2026-07
+      - key: BIRTH_DATE_KEY_ID
+        sync: false
+      - key: BIRTH_DATE_ENCRYPTION_KEY
+        sync: false
+      - key: TURN_URLS
+        sync: false
+      - key: TURN_CREDENTIAL_SECRET
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: DEPLOYMENT_ENVIRONMENT
+        value: staging
+      - key: DEPLOYMENT_REVISION
+        value: render
+      - key: OPENAPI_ENABLED
+        value: "false"
+      - key: WEB_ALLOWED_ORIGINS
+        sync: false
+      - key: ADMIN_ALLOWED_ORIGINS
+        sync: false
+      - key: PREVIEW_ALLOWED_ORIGINS
+        sync: false
+
+  - type: cron
+    name: strangr-maintenance
+    runtime: node
+    region: singapore
+    plan: starter
+    schedule: "0 * * * *"
+    buildCommand: npm ci && npm run build:worker
+    startCommand: npm run worker:once
+    envVars:
+      - key: NODE_VERSION
+        value: 22.19.0
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: strangr-realtime
+          property: connectionString
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_ISSUER
+        sync: false
+      - key: SUPABASE_JWT_AUDIENCE
+        value: authenticated
+      - key: SUPABASE_JWKS_URL
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: avatars
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: CURRENT_TERMS_VERSION
+        value: beta-2026-07
+      - key: CURRENT_GUIDELINES_VERSION
+        value: beta-2026-07
+      - key: BIRTH_DATE_KEY_ID
+        sync: false
+      - key: BIRTH_DATE_ENCRYPTION_KEY
+        sync: false
+      - key: TURN_URLS
+        sync: false
+      - key: TURN_CREDENTIAL_SECRET
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: DEPLOYMENT_ENVIRONMENT
+        value: staging
+      - key: DEPLOYMENT_REVISION
+        value: render
+      - key: OPENAPI_ENABLED
+        value: "false"
+      - key: WEB_ALLOWED_ORIGINS
+        sync: false
+      - key: ADMIN_ALLOWED_ORIGINS
+        sync: false
+
+  - type: keyvalue
+    name: strangr-realtime
+    region: singapore
+    plan: free
+    ipAllowList: []

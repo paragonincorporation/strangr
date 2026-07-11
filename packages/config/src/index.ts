@@ -18,6 +18,19 @@ const booleanSchema = z
   .enum(['true', 'false'])
   .default('false')
   .transform((value) => value === 'true')
+const originSchema = z.url().refine((value) => {
+  const url = new URL(value)
+  return value === url.origin
+}, 'must be an origin without a path, query, or fragment')
+const originListSchema = z
+  .string()
+  .transform((value) =>
+    value
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  )
+  .pipe(z.array(originSchema).min(1))
 const base64KeySchema = z.string().refine((value) => {
   try {
     return Buffer.from(value, 'base64').byteLength === 32
@@ -30,6 +43,18 @@ const commonServerSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_HOST: z.string().min(1).default('0.0.0.0'),
   API_PORT: portSchema.default(3000),
+  WEB_ALLOWED_ORIGINS: originListSchema,
+  ADMIN_ALLOWED_ORIGINS: originListSchema,
+  PREVIEW_ALLOWED_ORIGINS: z
+    .string()
+    .default('')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    )
+    .pipe(z.array(originSchema)),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   DATABASE_URL: postgresUrlSchema,
   REDIS_URL: redisUrlSchema,
@@ -72,12 +97,19 @@ const localDefaults = {
   DEPLOYMENT_ENVIRONMENT: 'local',
   DEPLOYMENT_REVISION: 'development',
   OPENAPI_ENABLED: 'true',
+  WEB_ALLOWED_ORIGINS: 'http://localhost:5173',
+  ADMIN_ALLOWED_ORIGINS: 'http://localhost:5174',
+  PREVIEW_ALLOWED_ORIGINS: '',
 } as const
 
 export type ServerConfig = z.infer<typeof commonServerSchema>
 export function parseServerConfig(environment: Record<string, string | undefined>): ServerConfig {
+  const normalized = {
+    ...environment,
+    API_PORT: environment.PORT ?? environment.API_PORT,
+  }
   const input =
-    environment.NODE_ENV === 'production' ? environment : { ...localDefaults, ...environment }
+    environment.NODE_ENV === 'production' ? normalized : { ...localDefaults, ...normalized }
   const result = commonServerSchema.safeParse(input)
   if (!result.success) {
     const reasons = result.error.issues

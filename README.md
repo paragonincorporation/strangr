@@ -39,9 +39,13 @@ npm run test:coverage
 npm run test:integration
 npm run test:e2e
 npm run build
+npm run build:web
+npm run build:admin
+npm run build:api
 npm run check
 npm start
 npm run start:worker
+npm run worker:once
 ```
 
 `npm start` runs the built Fastify API. Run `npm run build` first.
@@ -83,3 +87,9 @@ The full behavior/protocol record and screenshot set are in [the prototype basel
 - `GET /ws`: WebSocket upgrade path on the same port
 
 Readiness checks the attached Postgres boundary and live Redis connection. Database migrations remain an explicit release/local command and never run during API startup.
+
+## Deployment
+
+The user and admin Vite applications deploy as separate Vercel projects. Fastify HTTP/WebSocket traffic, scheduled maintenance, and Redis-compatible realtime state deploy through the root Render Blueprint in `render.yaml`. Supabase remains the Auth/Postgres/Storage provider; WebRTC media is peer-to-peer or TURN-relayed and does not pass through Vercel or the API.
+
+See [the deployment runbook](docs/operations/deployment.md) for project settings, environment ownership, deployment order, and smoke checks.

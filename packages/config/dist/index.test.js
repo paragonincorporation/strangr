@@ -2,9 +2,28 @@ import { describe, expect, test } from 'vitest';
 import { parseClientPublicConfig, parseServerConfig } from './index.js';
 describe('validated configuration', () => {
     test('provides safe local defaults', () => expect(parseServerConfig({ NODE_ENV: 'test' }).API_PORT).toBe(3000));
+    test('prefers the platform-provided port and parses exact origin lists', () => {
+        const result = parseServerConfig({
+            NODE_ENV: 'test',
+            API_PORT: '3000',
+            PORT: '10000',
+            WEB_ALLOWED_ORIGINS: 'https://example.com, https://preview.example.com',
+        });
+        expect(result.API_PORT).toBe(10000);
+        expect(result.WEB_ALLOWED_ORIGINS).toEqual([
+            'https://example.com',
+            'https://preview.example.com',
+        ]);
+    });
     test('names invalid production variables without values', () => {
-        expect(() => parseServerConfig({ NODE_ENV: 'production', DATABASE_URL: 'secret-value' })).toThrow(/REDIS_URL/);
-        expect(() => parseServerConfig({ NODE_ENV: 'production', DATABASE_URL: 'secret-value' })).not.toThrow(/secret-value/);
+        expect(() => parseServerConfig({
+            NODE_ENV: 'production',
+            DATABASE_URL: 'secret-value',
+        })).toThrow(/REDIS_URL/);
+        expect(() => parseServerConfig({
+            NODE_ENV: 'production',
+            DATABASE_URL: 'secret-value',
+        })).not.toThrow(/secret-value/);
     });
     test('client config accepts public keys only', () => {
         const result = parseClientPublicConfig({

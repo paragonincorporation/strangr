@@ -13,9 +13,17 @@ const avatars = new AvatarService(
   ),
 )
 const intervalMs = Number(process.env.WORKER_HEARTBEAT_MS || 30_000)
-console.info(JSON.stringify({ service: 'strangr-worker', status: 'ready', intervalMs }))
+const once = process.argv.includes('--once')
+console.info(
+  JSON.stringify({
+    service: 'strangr-worker',
+    status: 'ready',
+    intervalMs,
+    once,
+  }),
+)
 
-const run = async () => {
+const run = async (): Promise<boolean> => {
   try {
     const abandonedAvatarUploads = await avatars.cleanup()
     console.info(
@@ -26,6 +34,7 @@ const run = async () => {
         timestamp: new Date().toISOString(),
       }),
     )
+    return true
   } catch (error) {
     console.error(
       JSON.stringify({
@@ -34,8 +43,15 @@ const run = async () => {
         message: error instanceof Error ? error.message : 'unknown',
       }),
     )
+    return false
   }
 }
+if (once) {
+  const succeeded = await run()
+  await pool.end()
+  process.exit(succeeded ? 0 : 1)
+}
+
 const timer = setInterval(() => void run(), intervalMs)
 void run()
 const shutdown = async (signal: string) => {

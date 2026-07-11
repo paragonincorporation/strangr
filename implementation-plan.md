@@ -93,8 +93,8 @@ packages/
   database/            Drizzle schema, migrations, repositories, test helpers
   ui/                  design tokens and accessible shared primitives
   config/              shared TypeScript, lint, environment, and test configuration
+render.yaml             Render API, maintenance cron, and Key Value Blueprint
 infra/
-  render/              deployment definitions and notes
   turn/                TURN configuration and runbooks
 tests/
   e2e/                 Playwright journeys
@@ -135,29 +135,30 @@ Technology choices already made:
 
 Execution status as of July 12, 2026:
 
-| Unit | Status | Evidence |
-|---|---|---|
-| 0 | Complete | `docs/architecture/prototype-baseline.md`, ADRs, open-decision register, and checked-in visual references |
-| 1 | Complete | `docs/architecture/unit-01-foundation.md` and the workspace skeleton |
-| 2 | Complete | Shared strict TypeScript, lint/format/test/coverage/integration/E2E foundations, CI, migration and secret checks |
-| 3 | Complete | Shared React UI primitives, routed user/admin shells, responsive conversation safety states, and component/shell tests |
-| 4 | Complete | `docs/architecture/unit-04-contracts-and-config.md`, shared Zod boundaries, validated environment configuration, and OpenAPI plumbing |
-| 5 | Complete | `docs/architecture/unit-05-database.md`, Drizzle identity/profile schema, migration foundation, repositories, and encrypted birth-date boundary |
-| 6 | Complete | `docs/architecture/unit-06-08-identity-profile-assets.md`, Supabase JWKS authentication, identity/session reconciliation, capability guards, and authenticated web flows |
-| 7 | Complete | `docs/architecture/unit-06-08-identity-profile-assets.md`, resumable onboarding, server-derived age cohorts, policy acceptance, profile projection, privacy, and session UI |
-| 8 | Complete | `docs/architecture/unit-06-08-identity-profile-assets.md`, quarantined raster processing, immutable signed avatar assets, replacement, and orphan cleanup |
-| 9 | Complete | Redis primitives, single-use realtime tickets, authenticated one-port sockets, leased presence, pub/sub, heartbeat, revocation, and shared limits |
-| 10 | Complete | Atomic cohort/mode Redis queues, eligibility rechecks, match leases/acks, recent-pair exclusion, next cleanup, and multi-instance delivery |
-| 11 | Complete | Typed React session/media lifecycle, validated WebRTC relay, short-lived TURN credentials, sequenced random text, reconnect, and teardown |
-| 12–28 | Not started | Unit 12 is the next implementation unit; execute in the order below |
+| Unit  | Status      | Evidence                                                                                                                                                                    |
+| ----- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | Complete    | `docs/architecture/prototype-baseline.md`, ADRs, open-decision register, and checked-in visual references                                                                   |
+| 1     | Complete    | `docs/architecture/unit-01-foundation.md` and the workspace skeleton                                                                                                        |
+| 2     | Complete    | Shared strict TypeScript, lint/format/test/coverage/integration/E2E foundations, CI, migration and secret checks                                                            |
+| 3     | Complete    | Shared React UI primitives, routed user/admin shells, responsive conversation safety states, and component/shell tests                                                      |
+| 4     | Complete    | `docs/architecture/unit-04-contracts-and-config.md`, shared Zod boundaries, validated environment configuration, and OpenAPI plumbing                                       |
+| 5     | Complete    | `docs/architecture/unit-05-database.md`, Drizzle identity/profile schema, migration foundation, repositories, and encrypted birth-date boundary                             |
+| 6     | Complete    | `docs/architecture/unit-06-08-identity-profile-assets.md`, Supabase JWKS authentication, identity/session reconciliation, capability guards, and authenticated web flows    |
+| 7     | Complete    | `docs/architecture/unit-06-08-identity-profile-assets.md`, resumable onboarding, server-derived age cohorts, policy acceptance, profile projection, privacy, and session UI |
+| 8     | Complete    | `docs/architecture/unit-06-08-identity-profile-assets.md`, quarantined raster processing, immutable signed avatar assets, replacement, and orphan cleanup                   |
+| 9     | Complete    | Redis primitives, single-use realtime tickets, authenticated one-port sockets, leased presence, pub/sub, heartbeat, revocation, and shared limits                           |
+| 10    | Complete    | Atomic cohort/mode Redis queues, eligibility rechecks, match leases/acks, recent-pair exclusion, next cleanup, and multi-instance delivery                                  |
+| 11    | Complete    | Typed React session/media lifecycle, validated WebRTC relay, short-lived TURN credentials, sequenced random text, reconnect, and teardown                                   |
+| 11A   | Complete    | Separate Vercel web/admin deployments, Render API/cron/Key Value Blueprint, exact origin enforcement, and deployment runbook                                                |
+| 12–28 | Not started | Unit 12 is the next implementation unit; execute in the order below                                                                                                         |
 
-| Priority | Units | Outcome |
-|---|---|---|
-| P0 | 0–8 | Safe repository migration, typed foundations, identity, and policy enforcement |
-| P1 | 9–15 | Random matching, WebRTC, encounters, blocks, and social graph |
-| P2 | 16–20 | Persistent messages, direct calls, reports, sanctions, and admin operations |
-| P3 | 21–23 | Billing, premium matching filters, cosmetics, and compliant ads |
-| P4 | 24–28 | Privacy operations, observability, security/load hardening, deployment, and beta gate |
+| Priority | Units | Outcome                                                                               |
+| -------- | ----- | ------------------------------------------------------------------------------------- |
+| P0       | 0–8   | Safe repository migration, typed foundations, identity, and policy enforcement        |
+| P1       | 9–15  | Random matching, WebRTC, encounters, blocks, and social graph                         |
+| P2       | 16–20 | Persistent messages, direct calls, reports, sanctions, and admin operations           |
+| P3       | 21–23 | Billing, premium matching filters, cosmetics, and compliant ads                       |
+| P4       | 24–28 | Privacy operations, observability, security/load hardening, deployment, and beta gate |
 
 The critical dependency chain is:
 
@@ -426,6 +427,26 @@ Safety policy writing and legal/region decisions can run alongside engineering, 
 **Verification:** two browser contexts for text and video, permission denied, no devices, offer glare, ICE-before-description, reconnect within/after grace, peer leaves, next during negotiation, duplicate/out-of-order events, route unload, and track teardown.
 
 **Done when:** the prototype's core text/video loop works in React through authenticated one-port realtime and leaves no camera/socket/match state behind after exit.
+
+## Unit 11A — Establish Vercel frontend and Render backend deployments
+
+**Goal:** make the implemented clients and realtime foundation deployable without forcing long-running processes into serverless functions.
+
+**Prerequisites:** Units 1–11.
+
+**Implementation:**
+
+1. Deploy `apps/web` and `apps/admin` as separate Vercel Vite projects with workspace-aware builds, `dist` outputs, SPA deep-link rewrites, baseline browser headers, isolated public configuration, and client secret-bundle checks.
+2. Add frontend-specific root builds so a Vercel deployment never builds or deploys the Fastify API, database package, worker, or unrelated frontend.
+3. Deploy the one-port Fastify HTTP and `/ws` API through a Render Web Service in Singapore. Accept Render's `PORT`, retain graceful `SIGTERM`, expose readiness, and never run migrations during startup.
+4. Deploy Redis-compatible realtime state as Render Key Value in the same region. Treat free non-persistent state as private-testing infrastructure only.
+5. Refactor maintenance execution into bounded `worker:once` and continuous `start:worker` modes. Use an hourly Render Cron Job during private testing; move latency-sensitive queue processing to a paid Render Background Worker and disable overlapping cron execution.
+6. Configure comma-separated exact user, admin, and approved-preview origin lists. Apply the same policy to HTTP CORS and WebSocket upgrades; never allow arbitrary `*.vercel.app` origins.
+7. Record environment ownership, project settings, release order, domains, migrations, smoke checks, cron-to-worker transition, and contract-compatible rollout in an operations runbook.
+
+**Verification:** clean frontend-specific and API builds; secret scans; configuration parsing; allowed/denied CORS; rejected WebSocket origins; Vercel deep-link refreshes; Render liveness/readiness; bounded worker exit; authenticated HTTP and realtime smoke journey.
+
+**Done when:** Web and Admin deploy independently to Vercel, the API/realtime service and shared Redis state deploy to Render, maintenance has a bounded deployment mode, and every deployed component has a documented owner and environment boundary.
 
 ## Unit 12 — Persist encounters, random messages, call metadata, and retention
 
@@ -900,25 +921,26 @@ If a unit cannot meet these conditions because of an open legal/product/vendor d
 ## 9. Implementation progress and next-agent handoff
 
 Last updated: July 12, 2026  
-Completed scope: Units 0–11  
+Completed scope: Units 0–11A
 Next scheduled unit: Unit 12 — Persist encounters, random messages, call metadata, and retention
 
 ### Important repository state
 
-At the time of this handoff, `git status --short` reports the repository contents as untracked (`??`), including the pre-existing Unit 0–3 work and the Unit 4–5 implementation. There is therefore no reliable Git diff separating units or identifying a clean baseline commit. Treat every existing file as user-owned work: do not reset, clean, overwrite, or infer that an untracked file is disposable. Check Git status again before editing and preserve all unrelated content.
+The repository had a clean tracked baseline before Unit 11A deployment work began. Treat every existing file as user-owned work, check Git status before editing, and preserve unrelated changes.
 
 ### Unit completion summary
 
-| Unit | Status | Main evidence |
-|---|---|---|
-| 0 | Complete | `docs/architecture/prototype-baseline.md`, ADRs 0001–0007, `docs/architecture/open-decisions.md`, and prototype reference screenshots |
-| 1 | Complete | npm workspace skeleton, one-port Fastify/`ws` foundation, worker, Compose services, root development orchestration, and `docs/architecture/unit-01-foundation.md` |
-| 2 | Complete | strict shared TypeScript, ESLint/Prettier, Vitest/Testing Library/Playwright, integration configuration, CI and security checks, and `docs/architecture/unit-02-quality-foundation.md` |
-| 3 | Complete | shared UI tokens/primitives, routed React user/admin shells, responsive conversation safety states, tests, and `docs/architecture/unit-03-react-shells.md` |
-| 4 | Complete | Zod transport contracts, validated server/client configuration, versioned WebSocket validation, local OpenAPI, client secret-bundle check, and `docs/architecture/unit-04-contracts-and-config.md` |
-| 5 | Complete | Drizzle schema/migration, identity/profile repositories, account-state domain validation, field encryption, database integration tests, local migration/reset workflow, and `docs/architecture/unit-05-database.md` |
-| 6–8 | Complete | Supabase identity, onboarding/profile/privacy, safe avatar pipeline, and `docs/architecture/unit-06-08-identity-profile-assets.md` |
-| 9–11 | Complete | Authenticated Redis realtime, cohort-safe matching, random text/video/WebRTC loop, and `docs/architecture/unit-09-11-realtime-matching-webrtc.md` |
+| Unit | Status   | Main evidence                                                                                                                                                                                                       |
+| ---- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | Complete | `docs/architecture/prototype-baseline.md`, ADRs 0001–0007, `docs/architecture/open-decisions.md`, and prototype reference screenshots                                                                               |
+| 1    | Complete | npm workspace skeleton, one-port Fastify/`ws` foundation, worker, Compose services, root development orchestration, and `docs/architecture/unit-01-foundation.md`                                                   |
+| 2    | Complete | strict shared TypeScript, ESLint/Prettier, Vitest/Testing Library/Playwright, integration configuration, CI and security checks, and `docs/architecture/unit-02-quality-foundation.md`                              |
+| 3    | Complete | shared UI tokens/primitives, routed React user/admin shells, responsive conversation safety states, tests, and `docs/architecture/unit-03-react-shells.md`                                                          |
+| 4    | Complete | Zod transport contracts, validated server/client configuration, versioned WebSocket validation, local OpenAPI, client secret-bundle check, and `docs/architecture/unit-04-contracts-and-config.md`                  |
+| 5    | Complete | Drizzle schema/migration, identity/profile repositories, account-state domain validation, field encryption, database integration tests, local migration/reset workflow, and `docs/architecture/unit-05-database.md` |
+| 6–8  | Complete | Supabase identity, onboarding/profile/privacy, safe avatar pipeline, and `docs/architecture/unit-06-08-identity-profile-assets.md`                                                                                  |
+| 9–11 | Complete | Authenticated Redis realtime, cohort-safe matching, random text/video/WebRTC loop, and `docs/architecture/unit-09-11-realtime-matching-webrtc.md`                                                                   |
+| 11A  | Complete | Vercel frontend projects, Render backend Blueprint, exact HTTP/WebSocket origin policy, bounded maintenance mode, and `docs/architecture/unit-11a-deployment-foundation.md`                                         |
 
 ### Current Unit 4 boundary
 
