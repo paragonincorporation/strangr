@@ -1,14 +1,14 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useState } from 'react'
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   RouterProvider,
   createBrowserRouter,
   createMemoryRouter,
   type RouteObject,
-} from 'react-router-dom'
-import { RootErrorBoundary } from './components/root-error-boundary.js'
-import { AuthProvider, RequireAuth } from './auth.js'
-import { AppLayout, PublicLayout } from './layouts.js'
+} from "react-router-dom";
+import { RootErrorBoundary } from "./components/root-error-boundary.js";
+import { AuthProvider, RequireAuth } from "./auth.js";
+import { AppLayout, PublicLayout } from "./layouts.js";
 import {
   AuthPage,
   ConversationPage,
@@ -21,21 +21,22 @@ import {
   PlaceholderPage,
   ProfilePage,
   SettingsPage,
-} from './pages.js'
+  MessagesPage,
+} from "./pages.js";
 
 export const webRoutes: RouteObject[] = [
   {
-    path: '/',
+    path: "/",
     element: <PublicLayout />,
     errorElement: <RootErrorBoundary />,
     children: [
       { index: true, element: <LandingPage /> },
-      { path: 'auth/sign-in', element: <AuthPage /> },
-      { path: 'onboarding', element: <OnboardingPage /> },
+      { path: "auth/sign-in", element: <AuthPage /> },
+      { path: "onboarding", element: <OnboardingPage /> },
     ],
   },
   {
-    path: '/app',
+    path: "/app",
     element: (
       <RequireAuth>
         <AppLayout />
@@ -45,30 +46,24 @@ export const webRoutes: RouteObject[] = [
     children: [
       { index: true, element: <HomePage /> },
       {
-        path: 'friends',
+        path: "friends",
         element: <FriendsPage />,
       },
-      { path: 'people/:username', element: <OtherProfilePage /> },
+      { path: "people/:username", element: <OtherProfilePage /> },
       {
-        path: 'messages',
-        element: (
-          <PlaceholderPage
-            description="Persistent one-to-one friend conversations arrive in Unit 16."
-            eyebrow="KEEP TALKING"
-            title="Messages"
-          />
-        ),
+        path: "messages",
+        element: <MessagesPage />,
       },
       {
-        path: 'history',
+        path: "history",
         element: <HistoryPage />,
       },
       {
-        path: 'profile',
+        path: "profile",
         element: <ProfilePage />,
       },
       {
-        path: 'premium',
+        path: "premium",
         element: (
           <PlaceholderPage
             description="Premium remains disabled until server-backed Stripe entitlements exist."
@@ -78,13 +73,13 @@ export const webRoutes: RouteObject[] = [
         ),
       },
       {
-        path: 'settings',
+        path: "settings",
         element: <SettingsPage />,
       },
     ],
   },
   {
-    path: '/conversation/:mode',
+    path: "/conversation/:mode",
     element: (
       <RequireAuth>
         <ConversationPage />
@@ -92,10 +87,10 @@ export const webRoutes: RouteObject[] = [
     ),
     errorElement: <RootErrorBoundary />,
   },
-]
+];
 
-export const createWebMemoryRouter = (initialEntries: string[] = ['/']) =>
-  createMemoryRouter(webRoutes, { initialEntries })
+export const createWebMemoryRouter = (initialEntries: string[] = ["/"]) =>
+  createMemoryRouter(webRoutes, { initialEntries });
 
 function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -106,16 +101,16 @@ function Providers({ children }: { children: React.ReactNode }) {
           mutations: { retry: 0 },
         },
       }),
-  )
+  );
   return (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  )
+  );
 }
 
 export function WebApp({
   router = createBrowserRouter(webRoutes),
 }: {
-  router?: ReturnType<typeof createBrowserRouter>
+  router?: ReturnType<typeof createBrowserRouter>;
 }) {
   return (
     <RootErrorBoundary>
@@ -125,5 +120,5 @@ export function WebApp({
         </Providers>
       </AuthProvider>
     </RootErrorBoundary>
-  )
+  );
 }

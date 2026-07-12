@@ -1,10 +1,10 @@
-import '@testing-library/jest-dom/vitest'
-import { cleanup } from '@testing-library/react'
-import { afterEach, vi } from 'vitest'
+import "@testing-library/jest-dom/vitest";
+import { cleanup } from "@testing-library/react";
+import { afterEach, vi } from "vitest";
 
-afterEach(() => cleanup())
+afterEach(() => cleanup());
 
-Object.defineProperty(window, 'matchMedia', {
+Object.defineProperty(window, "matchMedia", {
   configurable: true,
   value: vi.fn().mockImplementation((query: string) => ({
     matches: false,
@@ -16,16 +16,16 @@ Object.defineProperty(window, 'matchMedia', {
     removeListener: vi.fn(),
     dispatchEvent: vi.fn(),
   })),
-})
+});
 
 if (!HTMLDialogElement.prototype.showModal) {
   HTMLDialogElement.prototype.showModal = function showModal() {
-    this.open = true
-  }
+    this.open = true;
+  };
 }
 
 if (!HTMLDialogElement.prototype.close) {
   HTMLDialogElement.prototype.close = function close() {
-    this.open = false
-  }
+    this.open = false;
+  };
 }

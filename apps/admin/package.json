@@ -1,19 +1,19 @@
 {
-  "name": "@strangr/admin",
+  "name": "@paramingle/admin",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
-    "build:vercel": "npm run build --workspace @strangr/ui && npm run build --workspace @strangr/admin && npm run client-secrets:check --prefix ../..",
+    "build:vercel": "npm run build --workspace @paramingle/ui && npm run build --workspace @paramingle/admin && npm run client-secrets:check --prefix ../..",
     "lint": "eslint src vite.config.ts vitest.config.ts --max-warnings 0",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
-    "@strangr/ui": "*",
+    "@paramingle/ui": "*",
     "@tanstack/react-query": "^5.101.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

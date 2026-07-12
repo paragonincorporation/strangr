@@ -25,7 +25,11 @@
   min-height: 100dvh;
   overflow: hidden;
   background:
-    radial-gradient(circle at 85% 10%, rgba(123, 44, 255, 0.16), transparent 30rem),
+    radial-gradient(
+      circle at 85% 10%,
+      rgba(123, 44, 255, 0.16),
+      transparent 30rem
+    ),
     var(--color-base);
 }
 .public-header {
@@ -136,7 +140,7 @@
 .principles li::before {
   margin-right: 0.5rem;
   color: var(--color-success);
-  content: '•';
+  content: "•";
 }
 .hero-art {
   position: relative;
@@ -275,7 +279,7 @@
   height: 1px;
   flex: 1;
   background: var(--color-border);
-  content: '';
+  content: "";
 }
 .auth-next {
   display: block;
@@ -398,7 +402,7 @@
   border: 1px solid var(--color-border);
   border-radius: 48% 52% 45% 55%;
   background: rgba(123, 44, 255, 0.08);
-  content: '';
+  content: "";
 }
 .mode-card--text::after {
   border-radius: var(--radius-lg);
@@ -497,7 +501,7 @@
   height: 100dvh;
   overflow: hidden;
   grid-template: 64px 1fr 88px / minmax(0, 1fr) minmax(300px, 25vw);
-  grid-template-areas: 'header header' 'stage chat' 'dock chat';
+  grid-template-areas: "header header" "stage chat" "dock chat";
   gap: 1px;
   background: var(--color-border);
 }
@@ -557,7 +561,9 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: radial-gradient(circle at center, rgba(123, 44, 255, 0.1), transparent 35%), #08080a;
+  background:
+    radial-gradient(circle at center, rgba(123, 44, 255, 0.1), transparent 35%),
+    #08080a;
 }
 .remote-empty {
   display: grid;
@@ -761,7 +767,7 @@
   }
   .call-shell {
     grid-template: 60px 1fr 78px / 1fr;
-    grid-template-areas: 'header' 'stage' 'dock';
+    grid-template-areas: "header" "stage" "dock";
   }
   .call-chat {
     position: fixed;

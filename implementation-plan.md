@@ -1,4 +1,4 @@
-# Strangr beta implementation plan
+# Paramingle beta implementation plan
 
 Status: execution plan for Codex agents  
 Source of truth: `plan.md`  
@@ -24,7 +24,7 @@ The implementation may refine filenames, but it must retain the domain boundarie
 
 ## 2. Product contract that must not drift
 
-Strangr is an account-based, web-first social discovery product for users aged 16 and older. A user can enter random text or video matching, talk to a stranger, and mutually transition that encounter into a persistent friendship with direct messages and voice/video calls.
+Paramingle is an account-based, web-first social discovery product for users aged 16 and older. A user can enter random text or video matching, talk to a stranger, and mutually transition that encounter into a persistent friendship with direct messages and voice/video calls.
 
 These beta rules are locked unless the product owner explicitly changes `plan.md`:
 
@@ -38,7 +38,7 @@ These beta rules are locked unless the product owner explicitly changes `plan.md
 - A block ends the current interaction immediately and prevents all future matching, profile access, requests, messages, and calls in both directions.
 - Friend requests can originate during an encounter or for 48 hours afterward. Persistent contact requires acceptance.
 - Encounter metadata and random-chat text are user-visible for at most 48 hours. Only minimal evidence tied to a report can outlive that window.
-- Strangr never records or stores video/audio. Calls store metadata only.
+- Paramingle never records or stores video/audio. Calls store metadata only.
 - Friend messages are persistent for beta with delete-for-me and a short, explicitly configured delete-for-everyone window. Beta does not claim end-to-end encryption.
 - Free safety and privacy controls never depend on premium status.
 - Premium can add language, broad-region, and interest filters, approved cosmetics, ad-free use, and small convenience features. It cannot add cross-cohort access or priority moderation.
@@ -154,7 +154,9 @@ Execution status as of July 12, 2026:
 | 13    | Complete    | Persistent contact denial, block APIs/UI, queue/live-contact termination, generic revocation, and profile/history/realtime enforcement                                      |
 | 14    | Complete    | Encounter-gated requests, canonical friendships/direct threads, mutes, counts, concurrency-safe consent, and request retention                                              |
 | 15    | Complete    | History/friends/requests/profile journeys, exact discovery, privacy-aware projections, bounded pagination, and friend-only leased presence                                  |
-| 16–28 | Not started | P1 is complete; Unit 16 is the next implementation unit                                                                                                                      |
+| 16    | Complete    | Ordered/idempotent direct messages, cursor recovery, realtime delivery, read cursors, deletion tombstones, authoritative unread counts, and Messages UI                     |
+| 17    | Complete    | Metadata-only direct voice/video calls, online ringing, atomic busy leases, call-scoped RTC relay, missed calls, media teardown, and retention cleanup                      |
+| 18–28 | Not started | P2 Units 16–17 are complete; Unit 18 is the next implementation unit                                                                                                        |
 
 | Priority | Units | Outcome                                                                               |
 | -------- | ----- | ------------------------------------------------------------------------------------- |
@@ -240,7 +242,7 @@ Safety policy writing and legal/region decisions can run alongside engineering, 
 
 ## Unit 3 — Port the visual system and React application shells
 
-**Goal:** replace manual screen orchestration with accessible React shells while retaining the Strangr visual identity.
+**Goal:** replace manual screen orchestration with accessible React shells while retaining the Paramingle visual identity.
 
 **Prerequisites:** Units 1–2.
 
@@ -925,8 +927,8 @@ If a unit cannot meet these conditions because of an open legal/product/vendor d
 ## 9. Implementation progress and next-agent handoff
 
 Last updated: July 12, 2026  
-Completed scope: Units 0–15 (P0 and P1 complete)
-Next scheduled unit: Unit 16 — Implement persistent friend messaging
+Completed scope: Units 0–17 (P0 and P1 complete; P2 Units 16–17 complete)
+Next scheduled unit: Unit 18 — Implement report intake and minimal evidence handling
 
 ### Important repository state
 
@@ -947,6 +949,7 @@ The repository had a clean tracked baseline before Unit 11A deployment work bega
 | 11A   | Complete | Vercel frontend projects, Render backend Blueprint, exact HTTP/WebSocket origin policy, bounded maintenance mode, and `docs/architecture/unit-11a-deployment-foundation.md`                                         |
 | 12–13 | Complete | Durable encounters/random text, metadata-only calls, retention/evidence worker, persistent cross-domain blocks, history/live-block UI, and `docs/architecture/unit-12-13-encounters-blocks.md`                      |
 | 14–15 | Complete | Encounter-gated mutual friendships, request retention, mutes/counts, exact discovery, privacy projections, friend presence and complete P1 UI in `docs/architecture/unit-14-15-friends-discovery-presence.md`       |
+| 16–17 | Complete | Ordered persistent messages, read/delete/unread semantics, realtime recovery, direct voice/video call leases/signaling/retention, Messages UI, and `docs/architecture/unit-16-17-direct-communications.md`          |
 
 ### Current Unit 4 boundary
 
@@ -999,8 +1002,10 @@ Database integration coverage includes encrypted birth-date storage/public omiss
 
 The local Compose Postgres and Redis containers were healthy during verification. Their continued availability must not be assumed by a later agent; check them before integration work.
 
-### Exact starting point for Unit 16
+Units 16–17 were verified on July 12, 2026 with the full root check, production build/client-secret scan, eight Playwright desktop/mobile journeys, production dependency audit, and migration validation. Docker-backed migration/integration execution could not run on this host because its Docker CLI does not include the Compose subcommand; the static migration validator passed all five migrations.
 
-Unit 16 should implement persistent messages only inside the direct threads created by `FriendRepository`. Every send/read/delete operation must recheck an active friendship and `BlockRepository.hasEitherDirection`; unfriend and block deny new messages immediately. Do not reuse or promote random encounter threads.
+### Exact starting point for Unit 18
 
-Request counts currently return `unreadMessages: 0`; Unit 16 must replace that placeholder with server-calculated unread state. Existing direct threads intentionally survive unfriend for later retention/deletion policy, but remain inaccessible for new contact. Unit 20 must apply the persistent block adapter to sanctions.
+Units 16–17 implement persistent messaging and metadata-only direct calls inside friendship-owned direct threads. Unit 18 can reference direct message and call IDs only after server-derived participant/context authorization. It must preserve the content-minimization boundary: no broad thread copies and no audio, video, SDP, or ICE evidence.
+
+`docs/architecture/unit-16-17-direct-communications.md` records ordering, idempotency, tombstone, call-lease, timeout, and retention behavior. Unit 20 must still apply its persistent sanction adapter to communication access.

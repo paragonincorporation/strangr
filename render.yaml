@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: strangr-api
+    name: paramingle-api
     runtime: node
     region: singapore
     plan: free
@@ -20,7 +20,7 @@ services:
       - key: REDIS_URL
         fromService:
           type: keyvalue
-          name: strangr-realtime
+          name: paramingle-realtime
           property: connectionString
       - key: SUPABASE_URL
         sync: false
@@ -64,7 +64,7 @@ services:
         sync: false
 
   - type: cron
-    name: strangr-maintenance
+    name: paramingle-maintenance
     runtime: node
     region: singapore
     plan: starter
@@ -81,7 +81,7 @@ services:
       - key: REDIS_URL
         fromService:
           type: keyvalue
-          name: strangr-realtime
+          name: paramingle-realtime
           property: connectionString
       - key: SUPABASE_URL
         sync: false
@@ -123,7 +123,7 @@ services:
         sync: false
 
   - type: keyvalue
-    name: strangr-realtime
+    name: paramingle-realtime
     region: singapore
     plan: free
     ipAllowList: []

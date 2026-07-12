@@ -1,6 +1,13 @@
-*, *::before, *::after { box-sizing: border-box; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
-html { min-height: 100%; background: var(--color-base); }
+html {
+  min-height: 100%;
+  background: var(--color-base);
+}
 
 body {
   min-width: 320px;
@@ -14,18 +21,38 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-button, input, textarea, select { font: inherit; }
-button { color: inherit; }
-button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
-button { border: 0; }
-[hidden] { display: none !important; }
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+button {
+  color: inherit;
+}
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  border: 0;
+}
+[hidden] {
+  display: none !important;
+}
 
 :focus-visible {
   outline: 3px solid var(--color-accent);
   outline-offset: 4px;
 }
 
-::selection { color: var(--color-text); background: var(--color-accent); }
+::selection {
+  color: var(--color-text);
+  background: var(--color-accent);
+}
 
 .sr-only {
   position: absolute;
@@ -59,11 +86,18 @@ button { border: 0; }
   text-transform: uppercase;
 }
 
-.eyebrow span { color: var(--color-accent); }
+.eyebrow span {
+  color: var(--color-accent);
+}
 
-h1, h2, p { margin-top: 0; }
+h1,
+h2,
+p {
+  margin-top: 0;
+}
 
-h1, h2 {
+h1,
+h2 {
   margin-bottom: 0;
   font-family: var(--font-display);
   font-weight: 900;
@@ -72,8 +106,16 @@ h1, h2 {
   text-transform: uppercase;
 }
 
-h1 em, h2 em { color: var(--color-accent); font-style: normal; }
+h1 em,
+h2 em {
+  color: var(--color-accent);
+  font-style: normal;
+}
 
-@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  .glass-panel { background: var(--color-glass-strong); }
+@supports not (
+  (-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))
+) {
+  .glass-panel {
+    background: var(--color-glass-strong);
+  }
 }

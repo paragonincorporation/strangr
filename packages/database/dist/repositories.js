@@ -1,8 +1,8 @@
-import { eq } from 'drizzle-orm';
-import { assertAccountStateTransition } from './account-state.js';
-import { profiles, users } from './schema.js';
+import { eq } from "drizzle-orm";
+import { assertAccountStateTransition } from "./account-state.js";
+import { profiles, users } from "./schema.js";
 export function normalizeUsername(username) {
-    return username.trim().normalize('NFKC').toLowerCase();
+    return username.trim().normalize("NFKC").toLowerCase();
 }
 export class IdentityRepository {
     database;
@@ -13,8 +13,10 @@ export class IdentityRepository {
     }
     async create(input) {
         if ((input.birthDate === undefined) !== (input.cohort === undefined))
-            throw new Error('Birth date and cohort must be stored together');
-        const encrypted = input.birthDate === undefined ? undefined : this.birthDateEncryptor.encrypt(input.birthDate);
+            throw new Error("Birth date and cohort must be stored together");
+        const encrypted = input.birthDate === undefined
+            ? undefined
+            : this.birthDateEncryptor.encrypt(input.birthDate);
         const [row] = await this.database
             .insert(users)
             .values({
@@ -35,7 +37,7 @@ export class IdentityRepository {
             createdAt: users.createdAt,
         });
         if (!row)
-            throw new Error('Identity insert returned no row');
+            throw new Error("Identity insert returned no row");
         return row;
     }
     async findPublicAccount(id) {
@@ -58,10 +60,10 @@ export class IdentityRepository {
                 .select({ accountState: users.accountState })
                 .from(users)
                 .where(eq(users.id, id))
-                .for('update')
+                .for("update")
                 .limit(1);
             if (!current)
-                throw new Error('Identity not found');
+                throw new Error("Identity not found");
             assertAccountStateTransition(current.accountState, state);
             await transaction
                 .update(users)
@@ -86,7 +88,7 @@ export class ProfileRepository {
         })
             .returning();
         if (!row)
-            throw new Error('Profile insert returned no row');
+            throw new Error("Profile insert returned no row");
         return row;
     }
     async findByUsername(username) {

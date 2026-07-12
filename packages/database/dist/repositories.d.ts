@@ -1,6 +1,6 @@
-import type { AccountState, AgeCohort } from '@strangr/contracts';
-import type { Database } from './client.js';
-import type { FieldEncryptor } from './encryption.js';
+import type { AccountState, AgeCohort } from "@paramingle/contracts";
+import type { Database } from "./client.js";
+import type { FieldEncryptor } from "./encryption.js";
 export declare function normalizeUsername(username: string): string;
 export interface CreateIdentityInput {
     authSubject: string;

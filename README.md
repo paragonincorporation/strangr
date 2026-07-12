@@ -1,6 +1,6 @@
-# Strangr
+# Paramingle
 
-Strangr is becoming an account-based social discovery platform: meet a random stranger by text or video, then keep the connection through mutual friendship, direct messages, and calls.
+Paramingle is becoming an account-based social discovery platform: meet a random stranger by text or video, then keep the connection through mutual friendship, direct messages, and calls.
 
 The repository is an npm-workspaces monorepo on Node.js 22. The new TypeScript foundation lives beside the anonymous prototype until its useful behavior is ported.
 

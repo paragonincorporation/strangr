@@ -6,9 +6,9 @@
 | ----------------------- | ---------------------------------------------- | ------------------------ |
 | User web                | Vercel project rooted at `apps/web`            | Global CDN               |
 | Admin web               | Separate Vercel project rooted at `apps/admin` | Global CDN               |
-| HTTP and `/ws` API      | Render `strangr-api` Web Service               | Singapore                |
-| Periodic maintenance    | Render `strangr-maintenance` Cron Job          | Singapore                |
-| Realtime state          | Render `strangr-realtime` Key Value            | Singapore                |
+| HTTP and `/ws` API      | Render `paramingle-api` Web Service            | Singapore                |
+| Periodic maintenance    | Render `paramingle-maintenance` Cron Job       | Singapore                |
+| Realtime state          | Render `paramingle-realtime` Key Value         | Singapore                |
 | Auth, Postgres, Storage | Supabase                                       | Closest practical region |
 | Media                   | Browser WebRTC with managed TURN fallback      | Provider dependent       |
 

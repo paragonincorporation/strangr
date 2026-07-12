@@ -1,8 +1,8 @@
-import { type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
-type ButtonVariant = 'primary' | 'secondary' | 'quiet' | 'danger';
+import { type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+type ButtonVariant = "primary" | "secondary" | "quiet" | "danger";
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
     variant?: ButtonVariant;
-    size?: 'small' | 'medium' | 'large';
+    size?: "small" | "medium" | "large";
     fullWidth?: boolean;
 }
 export declare const Button: import("react").ForwardRefExoticComponent<ButtonProps & import("react").RefAttributes<HTMLButtonElement>>;
@@ -10,21 +10,21 @@ export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>
     label: string;
 }
 export declare const IconButton: import("react").ForwardRefExoticComponent<IconButtonProps & import("react").RefAttributes<HTMLButtonElement>>;
-export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'id'> {
+export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "id"> {
     id?: string;
     label: string;
     hint?: string;
     error?: string;
 }
 export declare const Input: import("react").ForwardRefExoticComponent<InputProps & import("react").RefAttributes<HTMLInputElement>>;
-export interface TextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'id'> {
+export interface TextareaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "id"> {
     id?: string;
     label: string;
     hint?: string;
     error?: string;
 }
 export declare const Textarea: import("react").ForwardRefExoticComponent<TextareaProps & import("react").RefAttributes<HTMLTextAreaElement>>;
-export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id'> {
+export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, "id"> {
     id?: string;
     label: string;
     hint?: string;
@@ -39,29 +39,29 @@ export interface DialogProps {
     actions?: ReactNode;
     onClose: () => void;
     closeLabel?: string;
-    tone?: 'default' | 'danger';
+    tone?: "default" | "danger";
 }
 export declare function Dialog({ open, title, description, children, actions, onClose, closeLabel, tone, }: DialogProps): import("react").JSX.Element;
-export type AlertDialogProps = Omit<DialogProps, 'tone'>;
+export type AlertDialogProps = Omit<DialogProps, "tone">;
 export declare function AlertDialog(props: AlertDialogProps): import("react").JSX.Element;
 export interface ToastRegionProps extends HTMLAttributes<HTMLDivElement> {
     message?: string;
-    tone?: 'neutral' | 'success' | 'warning' | 'danger';
+    tone?: "neutral" | "success" | "warning" | "danger";
 }
 export declare function ToastRegion({ message, tone, className, ...props }: ToastRegionProps): import("react").JSX.Element;
 export interface AvatarProps {
     name: string;
     src?: string;
-    size?: 'small' | 'medium' | 'large';
-    status?: 'online' | 'offline';
+    size?: "small" | "medium" | "large";
+    status?: "online" | "offline";
 }
 export declare function Avatar({ name, src, size, status }: AvatarProps): import("react").JSX.Element;
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
-    tone?: 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
+    tone?: "neutral" | "accent" | "success" | "warning" | "danger";
 }
 export declare function Badge({ tone, className, ...props }: BadgeProps): import("react").JSX.Element;
 export interface CardProps extends HTMLAttributes<HTMLElement> {
-    as?: 'article' | 'section' | 'div';
+    as?: "article" | "section" | "div";
 }
 export declare function Card({ as: Component, className, ...props }: CardProps): import("react").JSX.Element;
 export interface TabItem {

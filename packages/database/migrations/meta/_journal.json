@@ -29,6 +29,13 @@
       "when": 1783836000000,
       "tag": "0004_friends_presence",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1783828800000,
+      "tag": "0005_direct_communications",
+      "breakpoints": true
     }
   ]
 }

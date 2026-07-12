@@ -23,8 +23,8 @@ npm test
 11 tests passed, 0 failed
 
 npm start
-Strangr web: http://localhost:3000
-Strangr signaling: ws://localhost:8080
+Paramingle web: http://localhost:3000
+Paramingle signaling: ws://localhost:8080
 
 GET http://localhost:3000/health
 200 {"ok":true,"activeSessions":0}

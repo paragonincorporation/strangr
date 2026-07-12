@@ -1,5 +1,5 @@
 {
-  "name": "@strangr/database",
+  "name": "@paramingle/database",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -24,7 +24,7 @@
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@strangr/contracts": "^0.0.0",
+    "@paramingle/contracts": "^0.0.0",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.22.0"
   }

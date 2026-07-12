@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 export declare const PROTOCOL_VERSION: 1;
 export declare const MAX_REALTIME_MESSAGE_BYTES = 16384;
 export declare const internalIdSchema: z.ZodUUID;
@@ -234,6 +234,34 @@ export declare const muteRequestSchema: z.ZodObject<{
     }>>;
     expiresAt: z.ZodOptional<z.ZodISODateTime>;
 }, z.core.$strip>;
+export declare const directMessageSendSchema: z.ZodObject<{
+    clientMessageId: z.ZodUUID;
+    body: z.ZodString;
+}, z.core.$strip>;
+export declare const readCursorSchema: z.ZodObject<{
+    sequence: z.ZodNumber;
+}, z.core.$strip>;
+export declare const messageDeleteSchema: z.ZodObject<{
+    scope: z.ZodEnum<{
+        everyone: "everyone";
+        me: "me";
+    }>;
+}, z.core.$strip>;
+export declare const directCallCreateSchema: z.ZodObject<{
+    friendId: z.ZodUUID;
+    mode: z.ZodEnum<{
+        video: "video";
+        voice: "voice";
+    }>;
+}, z.core.$strip>;
+export declare const directCallActionSchema: z.ZodObject<{
+    action: z.ZodEnum<{
+        accept: "accept";
+        reject: "reject";
+        cancel: "cancel";
+        end: "end";
+    }>;
+}, z.core.$strip>;
 export declare const encounterSchema: z.ZodObject<{
     id: z.ZodUUID;
     mode: z.ZodEnum<{
@@ -453,6 +481,60 @@ export declare const clientRealtimeEnvelopeSchema: z.ZodDiscriminatedUnion<[z.Zo
         clientMessageId: z.ZodString;
         text: z.ZodString;
     }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"call.accept">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        callId: z.ZodUUID;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"call.reject">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        callId: z.ZodUUID;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"call.cancel">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        callId: z.ZodUUID;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"call.end">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        callId: z.ZodUUID;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"call.rtc.offer">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        callId: z.ZodUUID;
+        sdp: z.ZodString;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"call.rtc.answer">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        callId: z.ZodUUID;
+        sdp: z.ZodString;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"call.rtc.ice">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        callId: z.ZodUUID;
+        candidate: z.ZodString;
+        sdpMid: z.ZodNullable<z.ZodString>;
+        sdpMLineIndex: z.ZodNullable<z.ZodNumber>;
+    }, z.core.$strip>;
 }, z.core.$strip>], "type">;
 export declare const serverRealtimeEnvelopeSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
     version: z.ZodLiteral<1>;
@@ -603,6 +685,85 @@ export declare const serverRealtimeEnvelopeSchema: z.ZodDiscriminatedUnion<[z.Zo
         clientMessageId: z.ZodString;
         sequence: z.ZodNumber;
     }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"message.created">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        threadId: z.ZodUUID;
+        message: z.ZodObject<{
+            id: z.ZodUUID;
+            senderId: z.ZodUUID;
+            clientMessageId: z.ZodUUID;
+            sequence: z.ZodNumber;
+            body: z.ZodString;
+            sentAt: z.ZodISODateTime;
+        }, z.core.$strip>;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"message.deleted">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        threadId: z.ZodUUID;
+        messageId: z.ZodUUID;
+        deletedAt: z.ZodISODateTime;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"message.read">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        threadId: z.ZodUUID;
+        userId: z.ZodUUID;
+        sequence: z.ZodNumber;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"call.invite">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        callId: z.ZodUUID;
+        callerId: z.ZodUUID;
+        mode: z.ZodEnum<{
+            video: "video";
+            voice: "voice";
+        }>;
+        expiresAt: z.ZodISODateTime;
+    }, z.core.$strip>;
+}, z.core.$strip>, ...z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"call.connecting" | "call.declined" | "call.cancelled" | "call.ended" | "call.missed" | "call.busy">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        callId: z.ZodUUID;
+    }, z.core.$strip>;
+}, z.core.$strip>[], z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"call.rtc.offer">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        callId: z.ZodUUID;
+        sdp: z.ZodString;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"call.rtc.answer">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        callId: z.ZodUUID;
+        sdp: z.ZodString;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"call.rtc.ice">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        callId: z.ZodUUID;
+        candidate: z.ZodString;
+        sdpMid: z.ZodNullable<z.ZodString>;
+        sdpMLineIndex: z.ZodNullable<z.ZodNumber>;
+    }, z.core.$strip>;
 }, z.core.$strip>], "type">;
 export declare const reservedRealtimeNamespaces: readonly ["connection", "presence", "match", "rtc", "chat", "friend", "call", "report", "error"];
 export declare function parseClientRealtimeMessage(input: string): z.ZodSafeParseSuccess<{
@@ -683,6 +844,60 @@ export declare function parseClientRealtimeMessage(input: string): z.ZodSafePars
         matchId: string;
         clientMessageId: string;
         text: string;
+    };
+} | {
+    version: 1;
+    type: "call.accept";
+    requestId: string;
+    payload: {
+        callId: string;
+    };
+} | {
+    version: 1;
+    type: "call.reject";
+    requestId: string;
+    payload: {
+        callId: string;
+    };
+} | {
+    version: 1;
+    type: "call.cancel";
+    requestId: string;
+    payload: {
+        callId: string;
+    };
+} | {
+    version: 1;
+    type: "call.end";
+    requestId: string;
+    payload: {
+        callId: string;
+    };
+} | {
+    version: 1;
+    type: "call.rtc.offer";
+    requestId: string;
+    payload: {
+        callId: string;
+        sdp: string;
+    };
+} | {
+    version: 1;
+    type: "call.rtc.answer";
+    requestId: string;
+    payload: {
+        callId: string;
+        sdp: string;
+    };
+} | {
+    version: 1;
+    type: "call.rtc.ice";
+    requestId: string;
+    payload: {
+        callId: string;
+        candidate: string;
+        sdpMid: string | null;
+        sdpMLineIndex: number | null;
     };
 }> | {
     success: false;

@@ -5,7 +5,7 @@ Date: July 11, 2026
 
 ## Decision
 
-Use Supabase Auth for verified email/password and Google, managed Postgres as the durable system of record, and Supabase Storage for processed avatars/cosmetic assets. Clients use Supabase directly only for authentication flows; business data goes through the Strangr API.
+Use Supabase Auth for verified email/password and Google, managed Postgres as the durable system of record, and Supabase Storage for processed avatars/cosmetic assets. Clients use Supabase directly only for authentication flows; business data goes through the Paramingle API.
 
 ## Consequences
 

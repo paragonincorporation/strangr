@@ -1,25 +1,27 @@
-import { AppFrame, Avatar, Badge } from '@strangr/ui'
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { AppFrame, Avatar, Badge } from "@paramingle/ui";
+import { Link, NavLink, Outlet } from "react-router-dom";
 
 const appLinks = [
-  { to: '/app', label: 'Home', end: true },
-  { to: '/app/friends', label: 'Friends' },
-  { to: '/app/messages', label: 'Messages' },
-  { to: '/app/history', label: 'History' },
-  { to: '/app/profile', label: 'Profile' },
-  { to: '/app/premium', label: 'Premium' },
-  { to: '/app/settings', label: 'Settings' },
-]
+  { to: "/app", label: "Home", end: true },
+  { to: "/app/friends", label: "Friends" },
+  { to: "/app/messages", label: "Messages" },
+  { to: "/app/history", label: "History" },
+  { to: "/app/profile", label: "Profile" },
+  { to: "/app/premium", label: "Premium" },
+  { to: "/app/settings", label: "Settings" },
+];
 
 function Navigation({ mobile = false }: { mobile?: boolean }) {
   const links = mobile
-    ? appLinks.filter((link) => ['Home', 'Friends', 'Messages', 'Profile'].includes(link.label))
-    : appLinks
+    ? appLinks.filter((link) =>
+        ["Home", "Friends", "Messages", "Profile"].includes(link.label),
+      )
+    : appLinks;
   return (
-    <div className={mobile ? 'mobile-links' : 'side-links'}>
+    <div className={mobile ? "mobile-links" : "side-links"}>
       {links.map((link) => (
         <NavLink
-          className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+          className={({ isActive }) => (isActive ? "is-active" : undefined)}
           {...(link.end ? { end: true } : {})}
           key={link.to}
           to={link.to}
@@ -29,7 +31,7 @@ function Navigation({ mobile = false }: { mobile?: boolean }) {
         </NavLink>
       ))}
     </div>
-  )
+  );
 }
 
 export function PublicLayout() {
@@ -40,7 +42,7 @@ export function PublicLayout() {
       </a>
       <header className="public-header">
         <Link className="public-wordmark" to="/">
-          STRANGR<i>.</i>
+          PARAMINGLE<i>.</i>
         </Link>
         <nav aria-label="Public navigation">
           <Link to="/auth/sign-in">Sign in</Link>
@@ -51,7 +53,7 @@ export function PublicLayout() {
       </header>
       <Outlet />
     </div>
-  )
+  );
 }
 
 export function AppLayout() {
@@ -68,5 +70,5 @@ export function AppLayout() {
     >
       <Outlet />
     </AppFrame>
-  )
+  );
 }

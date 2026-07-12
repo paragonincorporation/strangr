@@ -1,26 +1,26 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useState } from 'react'
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   RouterProvider,
   createBrowserRouter,
   createMemoryRouter,
   type RouteObject,
-} from 'react-router-dom'
-import { RootErrorBoundary } from './error-boundary.js'
-import { AdminLayout } from './layout.js'
-import { AdminLogin, AdminPage, CasePage, QueuePage } from './pages.js'
+} from "react-router-dom";
+import { RootErrorBoundary } from "./error-boundary.js";
+import { AdminLayout } from "./layout.js";
+import { AdminLogin, AdminPage, CasePage, QueuePage } from "./pages.js";
 
 export const adminRoutes: RouteObject[] = [
-  { path: '/', element: <AdminLogin />, errorElement: <RootErrorBoundary /> },
+  { path: "/", element: <AdminLogin />, errorElement: <RootErrorBoundary /> },
   {
-    path: '/admin',
+    path: "/admin",
     element: <AdminLayout />,
     errorElement: <RootErrorBoundary />,
     children: [
       { index: true, element: <QueuePage /> },
-      { path: 'cases/:caseId', element: <CasePage /> },
+      { path: "cases/:caseId", element: <CasePage /> },
       {
-        path: 'users',
+        path: "users",
         element: (
           <AdminPage
             eyebrow="PURPOSE-BOUND LOOKUP"
@@ -30,7 +30,7 @@ export const adminRoutes: RouteObject[] = [
         ),
       },
       {
-        path: 'appeals',
+        path: "appeals",
         element: (
           <AdminPage
             eyebrow="SECOND REVIEW"
@@ -40,7 +40,7 @@ export const adminRoutes: RouteObject[] = [
         ),
       },
       {
-        path: 'catalog',
+        path: "catalog",
         element: (
           <AdminPage
             eyebrow="APPROVED ASSETS"
@@ -50,7 +50,7 @@ export const adminRoutes: RouteObject[] = [
         ),
       },
       {
-        path: 'audit',
+        path: "audit",
         element: (
           <AdminPage
             eyebrow="APPEND ONLY"
@@ -60,7 +60,7 @@ export const adminRoutes: RouteObject[] = [
         ),
       },
       {
-        path: 'health',
+        path: "health",
         element: (
           <AdminPage
             eyebrow="OPERATIONS"
@@ -71,22 +71,24 @@ export const adminRoutes: RouteObject[] = [
       },
     ],
   },
-]
+];
 
-export const createAdminMemoryRouter = (initialEntries: string[] = ['/']) =>
-  createMemoryRouter(adminRoutes, { initialEntries })
+export const createAdminMemoryRouter = (initialEntries: string[] = ["/"]) =>
+  createMemoryRouter(adminRoutes, { initialEntries });
 
 function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: 1 } } }),
-  )
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+  return (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
 }
 
 export function AdminApp({
   router = createBrowserRouter(adminRoutes),
 }: {
-  router?: ReturnType<typeof createBrowserRouter>
+  router?: ReturnType<typeof createBrowserRouter>;
 }) {
   return (
     <RootErrorBoundary>
@@ -94,5 +96,5 @@ export function AdminApp({
         <RouterProvider router={router} />
       </Providers>
     </RootErrorBoundary>
-  )
+  );
 }

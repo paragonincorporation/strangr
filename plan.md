@@ -1,12 +1,12 @@
-# Strangr product and engineering plan
+# Paramingle product and engineering plan
 
 Status: working product plan  
 Last updated: July 11, 2026  
 Product line: **Meet strangers, keep the ones you like.**
 
-## 1. What Strangr is now
+## 1. What Paramingle is now
 
-Strangr is no longer an anonymous, disposable Omegle clone. It is an account-based social discovery platform where people can meet a random stranger, talk by text or video, and choose whether that person becomes part of their social circle.
+Paramingle is no longer an anonymous, disposable Omegle clone. It is an account-based social discovery platform where people can meet a random stranger, talk by text or video, and choose whether that person becomes part of their social circle.
 
 The core loop is:
 
@@ -26,7 +26,7 @@ These principles should be used when scope or design choices conflict:
 - Fast to meet, deliberate to keep. Random matching is immediate; persistent contact requires consent.
 - Identity without forced exposure. Every person has an account, but they choose which profile fields are visible.
 - Safety is part of the matching system. It is not a report modal added after the fact.
-- No nudity or sexual content. Strangr is a 16+ social product, not an adult platform.
+- No nudity or sexual content. Paramingle is a 16+ social product, not an adult platform.
 - Clear controls. People must be able to leave, skip, block, report, remove a friend, clear visible history, and delete their account without hunting through settings.
 - Paid features improve choice and expression, not basic safety. Blocking, reporting, age-safe matching, and core privacy controls stay free.
 - Ads never interrupt an active conversation. Revenue should not make the call room feel cheap or unsafe.
@@ -34,31 +34,31 @@ These principles should be used when scope or design choices conflict:
 
 ## 3. Decisions locked for the first public beta
 
-| Area | Beta decision |
-|---|---|
-| Minimum age | 16+ |
-| Accounts | Required |
-| Sign-in methods | Email and password, plus Google |
-| Email verification | Required before random matching or messaging |
-| Phone verification | Optional and risk-based, not required for every user |
-| Age notice | One-time onboarding acceptance, not a checkbox before every call |
-| Profile visibility | Public or private account, plus per-field visibility |
-| Random matching | Text and video modes |
-| Age safety | 16–17 and 18+ users are placed in separate random-matching cohorts |
-| Premium | Filters, cosmetics, ad-free use, and selected convenience features |
-| Friends | Mutual friend requests, persistent direct messages, direct voice/video calls |
-| Encounter history | Available for 48 hours, subject to blocks and privacy rules |
-| Random chat text | Retained for at most 48 hours for encounter history and report review, then deleted |
-| Video and audio | Never recorded or stored by Strangr |
-| Friend messages | Persistent until deletion under the beta retention policy |
-| End-to-end encryption | Not in beta |
-| Reports | Do not automatically end the conversation |
-| Blocks | End contact and prevent future matching, requests, messages, and calls |
-| Admin sanctions | Matching suspension, feature restriction, temporary suspension, or permanent account ban |
-| Notifications | In-app unread state only; no push, email, or SMS notifications in beta |
-| Monetization | One premium subscription plus carefully placed ads for free users |
-| Client | Vite, React, and TypeScript |
-| Launch | Web-first, publicly accessible when the beta gate is passed |
+| Area                  | Beta decision                                                                            |
+| --------------------- | ---------------------------------------------------------------------------------------- |
+| Minimum age           | 16+                                                                                      |
+| Accounts              | Required                                                                                 |
+| Sign-in methods       | Email and password, plus Google                                                          |
+| Email verification    | Required before random matching or messaging                                             |
+| Phone verification    | Optional and risk-based, not required for every user                                     |
+| Age notice            | One-time onboarding acceptance, not a checkbox before every call                         |
+| Profile visibility    | Public or private account, plus per-field visibility                                     |
+| Random matching       | Text and video modes                                                                     |
+| Age safety            | 16–17 and 18+ users are placed in separate random-matching cohorts                       |
+| Premium               | Filters, cosmetics, ad-free use, and selected convenience features                       |
+| Friends               | Mutual friend requests, persistent direct messages, direct voice/video calls             |
+| Encounter history     | Available for 48 hours, subject to blocks and privacy rules                              |
+| Random chat text      | Retained for at most 48 hours for encounter history and report review, then deleted      |
+| Video and audio       | Never recorded or stored by Paramingle                                                   |
+| Friend messages       | Persistent until deletion under the beta retention policy                                |
+| End-to-end encryption | Not in beta                                                                              |
+| Reports               | Do not automatically end the conversation                                                |
+| Blocks                | End contact and prevent future matching, requests, messages, and calls                   |
+| Admin sanctions       | Matching suspension, feature restriction, temporary suspension, or permanent account ban |
+| Notifications         | In-app unread state only; no push, email, or SMS notifications in beta                   |
+| Monetization          | One premium subscription plus carefully placed ads for free users                        |
+| Client                | Vite, React, and TypeScript                                                              |
+| Launch                | Web-first, publicly accessible when the beta gate is passed                              |
 
 ### Why email verification should be required
 
@@ -209,27 +209,27 @@ Deletion should be a visible settings action with password or provider reauthent
 
 Retention must be implemented in code and scheduled jobs, not left as a policy document.
 
-| Data | Beta retention |
-|---|---|
-| Exact date of birth | Until account deletion, encrypted at the application layer; derive and separately store cohort |
-| Email and auth provider identity | Account lifetime plus provider/legal deletion period |
-| Public profile | Account lifetime or until edited/deleted |
-| Random encounter metadata | 48 hours for user access; limited abuse metadata may be retained longer when tied to a report |
-| Random text messages | Maximum 48 hours, unless a minimal excerpt is preserved as report evidence |
-| Video/audio content | Not stored |
-| Friend direct messages | Stored until deletion policy applies; beta supports delete-for-me and a short delete-for-everyone window |
-| Direct and random call records | Metadata only; 90 days by default, then aggregate statistics only |
-| Blocks | Until the user unblocks or either account is deleted, with safety exceptions |
-| Rejected/expired requests | 30 days for spam control, then delete or aggregate |
-| Reports and sanctions | Duration set by the safety policy; permanent-ban evidence requires a documented restricted retention period |
-| Security logs | 30–90 days depending on sensitivity and purpose |
-| Billing records | As required by Stripe, accounting, tax, and applicable law |
-| Consent records | While the consent is relied upon, plus the required compliance period |
-| Admin audit records | At least one year for beta, access restricted |
+| Data                             | Beta retention                                                                                              |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Exact date of birth              | Until account deletion, encrypted at the application layer; derive and separately store cohort              |
+| Email and auth provider identity | Account lifetime plus provider/legal deletion period                                                        |
+| Public profile                   | Account lifetime or until edited/deleted                                                                    |
+| Random encounter metadata        | 48 hours for user access; limited abuse metadata may be retained longer when tied to a report               |
+| Random text messages             | Maximum 48 hours, unless a minimal excerpt is preserved as report evidence                                  |
+| Video/audio content              | Not stored                                                                                                  |
+| Friend direct messages           | Stored until deletion policy applies; beta supports delete-for-me and a short delete-for-everyone window    |
+| Direct and random call records   | Metadata only; 90 days by default, then aggregate statistics only                                           |
+| Blocks                           | Until the user unblocks or either account is deleted, with safety exceptions                                |
+| Rejected/expired requests        | 30 days for spam control, then delete or aggregate                                                          |
+| Reports and sanctions            | Duration set by the safety policy; permanent-ban evidence requires a documented restricted retention period |
+| Security logs                    | 30–90 days depending on sensitivity and purpose                                                             |
+| Billing records                  | As required by Stripe, accounting, tax, and applicable law                                                  |
+| Consent records                  | While the consent is relied upon, plus the required compliance period                                       |
+| Admin audit records              | At least one year for beta, access restricted                                                               |
 
 Friend-message auto-expiry needs deeper product work because a thread has two people with potentially different preferences. For beta, use simple deletion controls rather than pretending each person’s retention preference can independently erase the other person’s copy. A later disappearing-message mode should be agreed at thread level and clearly shown to both participants.
 
-There is no end-to-end encryption in beta. Data must still use TLS in transit, managed encryption at rest, field-level encryption for sensitive values, short-lived credentials, and strict service access. Product copy must not imply that messages are invisible to Strangr.
+There is no end-to-end encryption in beta. Data must still use TLS in transit, managed encryption at rest, field-level encryption for sensitive values, short-lived credentials, and strict service access. Product copy must not imply that messages are invisible to Paramingle.
 
 ## 7. Moderation and trust model
 
@@ -259,7 +259,7 @@ A longer policy should define examples, enforcement ranges, evidence handling, a
 
 The report form collects a reason, optional note, encounter/call/message identifiers, timestamps, and relevant technical metadata. It may attach a small text excerpt around a reported message. Raw message bodies should not be copied indiscriminately.
 
-Strangr should not ask users or browsers to silently capture call screenshots. Storing user-generated call imagery creates severe privacy and illegal-content handling risks. Video reports rely on account metadata, repeated-report patterns, network signals, user notes, and moderator decisions. A future evidence feature requires a separate legal and safety design.
+Paramingle should not ask users or browsers to silently capture call screenshots. Storing user-generated call imagery creates severe privacy and illegal-content handling risks. Video reports rely on account metadata, repeated-report patterns, network signals, user notes, and moderator decisions. A future evidence feature requires a separate legal and safety design.
 
 ### Sanctions
 
@@ -362,7 +362,7 @@ The final ad network is still a decision. Before integration, confirm that the n
 Use an npm-workspaces monorepo so the existing `npm` workflow remains familiar:
 
 ```text
-strangr/
+paramingle/
   apps/
     web/                 # Vite + React + TypeScript user app
     admin/               # Vite + React + TypeScript moderator app
@@ -403,7 +403,7 @@ Recommended:
 - TanStack Query for API cache, mutations, and invalidation.
 - A small Zustand store for transient call, device, and dock state only.
 - Zod schemas from the shared contracts package.
-- CSS variables and component CSS for the existing Strangr visual system.
+- CSS variables and component CSS for the existing Paramingle visual system.
 - Vitest and Testing Library for component and behavior tests.
 - Playwright for browser journeys.
 
@@ -439,7 +439,7 @@ Recommended:
 - Drizzle ORM and SQL migrations in the repository.
 - Supabase Storage for processed avatars and cosmetic assets.
 
-The web client uses Supabase only for authentication flows. Business data goes through the Strangr API, which validates the JWT and applies domain rules. This prevents critical matching, friendship, billing, and moderation rules from being split between clients and database policies. Row-level security remains useful as defense in depth and for Storage access.
+The web client uses Supabase only for authentication flows. Business data goes through the Paramingle API, which validates the JWT and applies domain rules. This prevents critical matching, friendship, billing, and moderation rules from being split between clients and database policies. Row-level security remains useful as defense in depth and for Storage access.
 
 Drizzle keeps the schema close to SQL and makes constraints and indexes visible. Prisma is the closest alternative and has a mature client, but its abstraction and migration workflow are less direct for the queue, moderation, and retention work planned here.
 
@@ -793,7 +793,7 @@ The current build is a useful interaction prototype. It is not the foundation fo
 
 ### Keep or adapt
 
-- The Strangr visual tokens and overall brand direction.
+- The Paramingle visual tokens and overall brand direction.
 - Camera and microphone permission timing.
 - WebRTC peer-connection concepts and device teardown behavior.
 - Heartbeat, reconnect, skip cleanup, and recent-pair exclusion concepts.
@@ -1125,41 +1125,41 @@ Logs use internal IDs and event types. Do not log access tokens, cookies, email 
 
 ## 23. Main risks and mitigations
 
-| Risk | Mitigation |
-|---|---|
-| Adult-minor random interaction | Separate 16–17 and 18+ cohorts, private DOB, legal review, strong reporting and sanctions |
-| Ban evasion | Verified email/provider, risk-based phone challenge, device/session signals, rate limits, admin review |
-| Public beta outgrows moderation | Invite rehearsal, capacity controls, report queue metrics, staffing gate before public registration |
-| Random video abuse without recordings | Fast block/report, repeat-signal analysis, account enforcement, clear policy, trained moderation |
-| Ads conflict with a 16+ UGC product | Provider approval, consent platform, teen treatment, contextual defaults, no in-call ads |
-| History creates stalking risk | 48-hour limit, visibility controls, hide on block, no global encounter browsing |
+| Risk                                        | Mitigation                                                                                               |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Adult-minor random interaction              | Separate 16–17 and 18+ cohorts, private DOB, legal review, strong reporting and sanctions                |
+| Ban evasion                                 | Verified email/provider, risk-based phone challenge, device/session signals, rate limits, admin review   |
+| Public beta outgrows moderation             | Invite rehearsal, capacity controls, report queue metrics, staffing gate before public registration      |
+| Random video abuse without recordings       | Fast block/report, repeat-signal analysis, account enforcement, clear policy, trained moderation         |
+| Ads conflict with a 16+ UGC product         | Provider approval, consent platform, teen treatment, contextual defaults, no in-call ads                 |
+| History creates stalking risk               | 48-hour limit, visibility controls, hide on block, no global encounter browsing                          |
 | Persistent messages increase privacy burden | Clear retention, deletion jobs, no content logs, access controls, E2E kept as an explicit future project |
-| WebRTC fails behind restrictive NAT | Managed TURN, short-lived credentials, device/network tests, relay monitoring |
-| TURN and realtime costs are unknown | Cost per call-hour metric, caps, load tests, managed-first then coturn evaluation |
-| Filters reduce match liquidity | Limited beta filters, wait-time UI, opt-in relaxation, measure queue size by cohort |
-| Paid cosmetics imitate trust signals | Reserved staff/verification namespace and catalog validation |
-| No push notifications hurts friend calls | Clear in-app presence and missed-call behavior; notifications remain a measured follow-up |
-| Cold-start network effects | Quiet invite rehearsal, controlled cohort opening, honest wait estimates, text mode fallback |
+| WebRTC fails behind restrictive NAT         | Managed TURN, short-lived credentials, device/network tests, relay monitoring                            |
+| TURN and realtime costs are unknown         | Cost per call-hour metric, caps, load tests, managed-first then coturn evaluation                        |
+| Filters reduce match liquidity              | Limited beta filters, wait-time UI, opt-in relaxation, measure queue size by cohort                      |
+| Paid cosmetics imitate trust signals        | Reserved staff/verification namespace and catalog validation                                             |
+| No push notifications hurts friend calls    | Clear in-app presence and missed-call behavior; notifications remain a measured follow-up                |
+| Cold-start network effects                  | Quiet invite rehearsal, controlled cohort opening, honest wait estimates, text mode fallback             |
 
 ## 24. Decisions still open
 
 These do not stop engineering foundations, but each needs an owner and decision record before its feature ships.
 
-| Decision | Recommended starting point |
-|---|---|
-| Launch countries | Start in one or a small set of legally reviewed regions near the chosen infrastructure |
-| Premium price | Test one monthly plan; do not add annual until cancellation and value are understood |
-| Final premium name | Keep it plain during beta; branding can follow validated benefits |
-| Cosmetic economy | Subscription catalog plus a few earned items; no currency or trading |
-| Ad network | Choose only after written acceptance of 16+ random-chat UGC |
-| Consent provider | Use a Google-certified CMP if Google ads are selected |
-| Phone challenges | Trigger on risk, recovery, appeals, or repeated abuse; do not require universally |
-| Friend-message expiry | Persistent in beta with deletion controls; design mutual disappearing messages later |
-| Exact direct-call history period | Start at 90 days and confirm through privacy review |
-| Gender filters | Exclude from beta until policy, safety, and data-handling review |
-| Profile discovery | Exact username search only at beta; no broad people recommendation feed |
-| Capacity ceiling | Set from load tests and moderator coverage, not guesses |
-| E2E encryption | Separate v2 architecture project covering identity keys, multi-device, reports, and recovery |
+| Decision                         | Recommended starting point                                                                   |
+| -------------------------------- | -------------------------------------------------------------------------------------------- |
+| Launch countries                 | Start in one or a small set of legally reviewed regions near the chosen infrastructure       |
+| Premium price                    | Test one monthly plan; do not add annual until cancellation and value are understood         |
+| Final premium name               | Keep it plain during beta; branding can follow validated benefits                            |
+| Cosmetic economy                 | Subscription catalog plus a few earned items; no currency or trading                         |
+| Ad network                       | Choose only after written acceptance of 16+ random-chat UGC                                  |
+| Consent provider                 | Use a Google-certified CMP if Google ads are selected                                        |
+| Phone challenges                 | Trigger on risk, recovery, appeals, or repeated abuse; do not require universally            |
+| Friend-message expiry            | Persistent in beta with deletion controls; design mutual disappearing messages later         |
+| Exact direct-call history period | Start at 90 days and confirm through privacy review                                          |
+| Gender filters                   | Exclude from beta until policy, safety, and data-handling review                             |
+| Profile discovery                | Exact username search only at beta; no broad people recommendation feed                      |
+| Capacity ceiling                 | Set from load tests and moderator coverage, not guesses                                      |
+| E2E encryption                   | Separate v2 architecture project covering identity keys, multi-device, reports, and recovery |
 
 ## 25. Immediate next actions
 
@@ -1192,4 +1192,3 @@ These sources support the current technical recommendations. Product and legal d
 - [Google consent requirements for ads](https://support.google.com/adsense/answer/7670013?hl=en)
 - [Google tag for child- and teen-directed treatment](https://support.google.com/adsense/answer/17042704?hl=en)
 - [Google AdSense publisher age requirement](https://support.google.com/adsense/answer/14230?hl=en)
-

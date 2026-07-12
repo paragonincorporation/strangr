@@ -1188,6 +1188,7 @@ export declare const encounterStateEnum: import("drizzle-orm/pg-core").PgEnum<["
 export declare const threadTypeEnum: import("drizzle-orm/pg-core").PgEnum<["random", "direct"]>;
 export declare const messageTypeEnum: import("drizzle-orm/pg-core").PgEnum<["random", "direct"]>;
 export declare const callTypeEnum: import("drizzle-orm/pg-core").PgEnum<["random", "direct"]>;
+export declare const callMediaEnum: import("drizzle-orm/pg-core").PgEnum<["voice", "video"]>;
 export declare const encounters: import("drizzle-orm/pg-core").PgTableWithColumns<{
     name: "encounters";
     schema: undefined;
@@ -1655,6 +1656,23 @@ export declare const threadMembers: import("drizzle-orm/pg-core").PgTableWithCol
             identity: undefined;
             generated: undefined;
         }, {}, {}>;
+        readSequence: import("drizzle-orm/pg-core").PgColumn<{
+            name: "read_sequence";
+            tableName: "thread_members";
+            dataType: "number";
+            columnType: "PgBigInt53";
+            data: number;
+            driverParam: string | number;
+            notNull: true;
+            hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: undefined;
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {}>;
         joinedAt: import("drizzle-orm/pg-core").PgColumn<{
             name: "joined_at";
             tableName: "thread_members";
@@ -1788,7 +1806,7 @@ export declare const messages: import("drizzle-orm/pg-core").PgTableWithColumns<
             columnType: "PgText";
             data: string;
             driverParam: string;
-            notNull: true;
+            notNull: false;
             hasDefault: false;
             isPrimaryKey: false;
             isAutoincrement: false;
@@ -1815,6 +1833,23 @@ export declare const messages: import("drizzle-orm/pg-core").PgTableWithColumns<
             identity: undefined;
             generated: undefined;
         }, {}, {}>;
+        deletedForEveryoneAt: import("drizzle-orm/pg-core").PgColumn<{
+            name: "deleted_for_everyone_at";
+            tableName: "messages";
+            dataType: "date";
+            columnType: "PgTimestamp";
+            data: Date;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: undefined;
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {}>;
         expiresAt: import("drizzle-orm/pg-core").PgColumn<{
             name: "expires_at";
             tableName: "messages";
@@ -1824,6 +1859,64 @@ export declare const messages: import("drizzle-orm/pg-core").PgTableWithColumns<
             driverParam: string;
             notNull: false;
             hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: undefined;
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {}>;
+    };
+    dialect: "pg";
+}>;
+export declare const messageHiddenFor: import("drizzle-orm/pg-core").PgTableWithColumns<{
+    name: "message_hidden_for";
+    schema: undefined;
+    columns: {
+        messageId: import("drizzle-orm/pg-core").PgColumn<{
+            name: "message_id";
+            tableName: "message_hidden_for";
+            dataType: "string";
+            columnType: "PgUUID";
+            data: string;
+            driverParam: string;
+            notNull: true;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: undefined;
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {}>;
+        userId: import("drizzle-orm/pg-core").PgColumn<{
+            name: "user_id";
+            tableName: "message_hidden_for";
+            dataType: "string";
+            columnType: "PgUUID";
+            data: string;
+            driverParam: string;
+            notNull: true;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: undefined;
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {}>;
+        hiddenAt: import("drizzle-orm/pg-core").PgColumn<{
+            name: "hidden_at";
+            tableName: "message_hidden_for";
+            dataType: "date";
+            columnType: "PgTimestamp";
+            data: Date;
+            driverParam: string;
+            notNull: true;
+            hasDefault: true;
             isPrimaryKey: false;
             isAutoincrement: false;
             hasRuntimeDefault: false;
@@ -1912,14 +2005,48 @@ export declare const calls: import("drizzle-orm/pg-core").PgTableWithColumns<{
             tableName: "calls";
             dataType: "string";
             columnType: "PgEnumColumn";
-            data: "text" | "video";
+            data: "video" | "voice";
             driverParam: string;
             notNull: true;
             hasDefault: false;
             isPrimaryKey: false;
             isAutoincrement: false;
             hasRuntimeDefault: false;
-            enumValues: ["text", "video"];
+            enumValues: ["voice", "video"];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {}>;
+        state: import("drizzle-orm/pg-core").PgColumn<{
+            name: "state";
+            tableName: "calls";
+            dataType: "string";
+            columnType: "PgText";
+            data: string;
+            driverParam: string;
+            notNull: true;
+            hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: [string, ...string[]];
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {}>;
+        invitedBy: import("drizzle-orm/pg-core").PgColumn<{
+            name: "invited_by";
+            tableName: "calls";
+            dataType: "string";
+            columnType: "PgUUID";
+            data: string;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: undefined;
             baseColumn: never;
             identity: undefined;
             generated: undefined;

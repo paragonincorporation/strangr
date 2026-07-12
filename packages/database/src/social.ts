@@ -9,10 +9,10 @@ import {
   lt,
   or,
   sql,
-} from 'drizzle-orm'
-import { alias } from 'drizzle-orm/pg-core'
-import type { MatchMode } from '@strangr/contracts'
-import type { Database } from './client.js'
+} from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import type { MatchMode } from "@paramingle/contracts";
+import type { Database } from "./client.js";
 import {
   blocks,
   friendRequests,
@@ -27,10 +27,10 @@ import {
   reportEvidence,
   threadMembers,
   threads,
-} from './schema.js'
+} from "./schema.js";
 
-const ENCOUNTER_TTL_MS = 48 * 60 * 60 * 1000
-const CALL_TTL_MS = 90 * 24 * 60 * 60 * 1000
+const ENCOUNTER_TTL_MS = 48 * 60 * 60 * 1000;
+const CALL_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 export class BlockRepository {
   constructor(private readonly database: Database) {}
@@ -45,12 +45,12 @@ export class BlockRepository {
           and(eq(blocks.blockerId, second), eq(blocks.blockedId, first)),
         ),
       )
-      .limit(1)
-    return row !== undefined
+      .limit(1);
+    return row !== undefined;
   }
 
   async create(blockerId: string, blockedId: string, reasonCategory: string) {
-    if (blockerId === blockedId) throw new Error('self_block')
+    if (blockerId === blockedId) throw new Error("self_block");
     const [row] = await this.database
       .insert(blocks)
       .values({ blockerId, blockedId, reasonCategory })
@@ -58,7 +58,7 @@ export class BlockRepository {
         target: [blocks.blockerId, blocks.blockedId],
         set: { reasonCategory, updatedAt: new Date() },
       })
-      .returning({ id: blocks.id, createdAt: blocks.createdAt })
+      .returning({ id: blocks.id, createdAt: blocks.createdAt });
     await this.database
       .update(encounterParticipants)
       .set({ hiddenAt: new Date(), updatedAt: new Date() })
@@ -73,17 +73,17 @@ export class BlockRepository {
               .where(eq(encounterParticipants.userId, blockedId)),
           ),
         ),
-      )
+      );
     await this.database
       .update(friendRequests)
       .set({
-        state: 'cancelled',
+        state: "cancelled",
         resolvedAt: new Date(),
         updatedAt: new Date(),
       })
       .where(
         and(
-          eq(friendRequests.state, 'pending'),
+          eq(friendRequests.state, "pending"),
           or(
             and(
               eq(friendRequests.senderId, blockerId),
@@ -95,20 +95,20 @@ export class BlockRepository {
             ),
           ),
         ),
-      )
+      );
     const [first, second] =
-      blockerId < blockedId ? [blockerId, blockedId] : [blockedId, blockerId]
+      blockerId < blockedId ? [blockerId, blockedId] : [blockedId, blockerId];
     await this.database
       .update(friendships)
-      .set({ state: 'ended', endedAt: new Date(), updatedAt: new Date() })
+      .set({ state: "ended", endedAt: new Date(), updatedAt: new Date() })
       .where(
         and(
           eq(friendships.firstUserId, first),
           eq(friendships.secondUserId, second),
-          eq(friendships.state, 'active'),
+          eq(friendships.state, "active"),
         ),
-      )
-    return row!
+      );
+    return row!;
   }
 
   async remove(blockerId: string, blockedId: string) {
@@ -116,7 +116,7 @@ export class BlockRepository {
       .delete(blocks)
       .where(
         and(eq(blocks.blockerId, blockerId), eq(blocks.blockedId, blockedId)),
-      )
+      );
   }
 
   async blocksUsername(viewerId: string, username: string) {
@@ -126,11 +126,11 @@ export class BlockRepository {
       .where(
         eq(
           profiles.normalizedUsername,
-          username.trim().normalize('NFKC').toLowerCase(),
+          username.trim().normalize("NFKC").toLowerCase(),
         ),
       )
-      .limit(1)
-    return target ? this.hasEitherDirection(viewerId, target.id) : false
+      .limit(1);
+    return target ? this.hasEitherDirection(viewerId, target.id) : false;
   }
 }
 
@@ -143,17 +143,17 @@ export class EncounterRepository {
     participantIds: [string, string],
     now = new Date(),
   ) {
-    const expiresAt = new Date(now.getTime() + ENCOUNTER_TTL_MS)
+    const expiresAt = new Date(now.getTime() + ENCOUNTER_TTL_MS);
     await this.database.transaction(async (tx) => {
       await tx
         .insert(encounters)
         .values({ id, mode, startedAt: now, visibleUntil: expiresAt })
-        .onConflictDoNothing()
+        .onConflictDoNothing();
       const [thread] = await tx
         .insert(threads)
-        .values({ type: 'random', encounterId: id, expiresAt })
+        .values({ type: "random", encounterId: id, expiresAt })
         .onConflictDoNothing({ target: threads.encounterId })
-        .returning({ id: threads.id })
+        .returning({ id: threads.id });
       const threadId =
         thread?.id ??
         (
@@ -162,40 +162,40 @@ export class EncounterRepository {
             .from(threads)
             .where(eq(threads.encounterId, id))
             .limit(1)
-        )[0]!.id
+        )[0]!.id;
       await tx
         .insert(encounterParticipants)
         .values(participantIds.map((userId) => ({ encounterId: id, userId })))
-        .onConflictDoNothing()
+        .onConflictDoNothing();
       await tx
         .insert(threadMembers)
         .values(participantIds.map((userId) => ({ threadId, userId })))
-        .onConflictDoNothing()
-      if (mode === 'video') {
+        .onConflictDoNothing();
+      if (mode === "video") {
         const [call] = await tx
           .insert(calls)
           .values({
             encounterId: id,
-            type: 'random',
+            type: "random",
             mode,
             startedAt: now,
             expiresAt: new Date(now.getTime() + CALL_TTL_MS),
           })
-          .returning({ id: calls.id })
+          .returning({ id: calls.id });
         await tx
           .insert(callParticipants)
           .values(
             participantIds.map((userId) => ({ callId: call!.id, userId })),
-          )
+          );
       }
-    })
+    });
   }
 
   async connected(id: string, now = new Date()) {
     await this.database
       .update(calls)
       .set({ connectedAt: now })
-      .where(and(eq(calls.encounterId, id), isNull(calls.connectedAt)))
+      .where(and(eq(calls.encounterId, id), isNull(calls.connectedAt)));
   }
 
   async end(
@@ -209,13 +209,13 @@ export class EncounterRepository {
       await tx
         .update(encounters)
         .set({
-          state: 'ended',
+          state: "ended",
           endedAt: now,
           completionReason: reason,
           ...(diagnostic ? { diagnosticsCategory: diagnostic } : {}),
           updatedAt: now,
         })
-        .where(and(eq(encounters.id, id), eq(encounters.state, 'active')))
+        .where(and(eq(encounters.id, id), eq(encounters.state, "active")));
       await tx
         .update(encounterParticipants)
         .set({ result: reason, updatedAt: now })
@@ -224,7 +224,7 @@ export class EncounterRepository {
             eq(encounterParticipants.encounterId, id),
             eq(encounterParticipants.userId, actorId),
           ),
-        )
+        );
       await tx
         .update(calls)
         .set({
@@ -232,8 +232,8 @@ export class EncounterRepository {
           completionReason: reason,
           ...(diagnostic ? { diagnosticsCategory: diagnostic } : {}),
         })
-        .where(and(eq(calls.encounterId, id), isNull(calls.endedAt)))
-    })
+        .where(and(eq(calls.encounterId, id), isNull(calls.endedAt)));
+    });
   }
 
   async addRandomMessage(
@@ -244,23 +244,23 @@ export class EncounterRepository {
     body: string,
     sentAt = new Date(),
   ) {
-    const clean = body.normalize('NFC').trim()
-    if (!clean || [...clean].length > 2_000) throw new Error('invalid_message')
+    const clean = body.normalize("NFC").trim();
+    if (!clean || [...clean].length > 2_000) throw new Error("invalid_message");
     const [thread] = await this.database
       .select({ id: threads.id, expiresAt: threads.expiresAt })
       .from(threads)
       .where(
-        and(eq(threads.encounterId, encounterId), eq(threads.type, 'random')),
+        and(eq(threads.encounterId, encounterId), eq(threads.type, "random")),
       )
-      .limit(1)
+      .limit(1);
     if (!thread?.expiresAt || thread.expiresAt <= sentAt)
-      throw new Error('encounter_expired')
+      throw new Error("encounter_expired");
     const [row] = await this.database
       .insert(messages)
       .values({
         threadId: thread.id,
         senderId,
-        type: 'random',
+        type: "random",
         clientMessageId,
         serverSequence: sequence,
         body: clean,
@@ -268,8 +268,8 @@ export class EncounterRepository {
         expiresAt: thread.expiresAt,
       })
       .onConflictDoNothing()
-      .returning({ id: messages.id, body: messages.body })
-    if (row) return row
+      .returning({ id: messages.id, body: messages.body });
+    if (row) return row;
     return (
       await this.database
         .select({ id: messages.id, body: messages.body })
@@ -281,7 +281,7 @@ export class EncounterRepository {
           ),
         )
         .limit(1)
-    )[0]!
+    )[0]!;
   }
 
   async list(
@@ -290,8 +290,8 @@ export class EncounterRepository {
     limit: number,
     now = new Date(),
   ) {
-    const before = cursor ? decodeCursor(cursor) : now
-    const peer = alias(encounterParticipants, 'peer_participant')
+    const before = cursor ? decodeCursor(cursor) : now;
+    const peer = alias(encounterParticipants, "peer_participant");
     const rows = await this.database
       .select({
         id: encounters.id,
@@ -328,7 +328,7 @@ export class EncounterRepository {
         ),
       )
       .orderBy(desc(encounters.startedAt), desc(encounters.id))
-      .limit(limit + 1)
+      .limit(limit + 1);
     const page = rows.slice(0, limit).map((row) => ({
       id: row.id,
       mode: row.mode,
@@ -340,20 +340,20 @@ export class EncounterRepository {
         displayName: row.isPrivate ? row.username : row.displayName,
         avatarAvailable: Boolean(row.avatarObjectKey),
       },
-      friendshipState: 'none' as const,
-      requestState: 'none' as const,
+      friendshipState: "none" as const,
+      requestState: "none" as const,
       hidden: false,
       reported: false,
       blocked: false,
-    }))
+    }));
     const next =
       rows.length > limit && page.at(-1)
         ? encodeCursor(page.at(-1)!.startedAt)
-        : null
+        : null;
     return {
       items: page,
       nextCursor: next,
-    }
+    };
   }
 
   async hide(userId: string, encounterId: string) {
@@ -366,8 +366,8 @@ export class EncounterRepository {
           eq(encounterParticipants.encounterId, encounterId),
         ),
       )
-      .returning({ id: encounterParticipants.encounterId })
-    return rows.length > 0
+      .returning({ id: encounterParticipants.encounterId });
+    return rows.length > 0;
   }
 
   async preserveEvidence(
@@ -380,30 +380,30 @@ export class EncounterRepository {
       .select({ body: messages.body })
       .from(messages)
       .where(eq(messages.id, messageId))
-      .limit(1)
-    if (!message) throw new Error('message_not_found')
+      .limit(1);
+    if (!message) throw new Error("message_not_found");
     return this.database.insert(reportEvidence).values({
       encounterId,
       messageId,
-      excerpt: [...message.body].slice(0, 500).join(''),
+      excerpt: [...(message.body ?? "")].slice(0, 500).join(""),
       retentionReason: reason,
       expiresAt,
-    })
+    });
   }
 
   async cleanupExpired(batchSize = 500, now = new Date(), dryRun = false) {
     const expiredMessages = await this.database
       .select({ id: messages.id })
       .from(messages)
-      .where(and(lt(messages.expiresAt, now), eq(messages.type, 'random')))
+      .where(and(lt(messages.expiresAt, now), eq(messages.type, "random")))
       .orderBy(asc(messages.expiresAt))
-      .limit(batchSize)
+      .limit(batchSize);
     const expiredEncounters = await this.database
       .select({ id: encounters.id, visibleUntil: encounters.visibleUntil })
       .from(encounters)
       .where(lt(encounters.visibleUntil, now))
       .orderBy(asc(encounters.visibleUntil))
-      .limit(batchSize)
+      .limit(batchSize);
     if (!dryRun) {
       if (expiredMessages.length)
         await this.database.delete(messages).where(
@@ -411,21 +411,21 @@ export class EncounterRepository {
             messages.id,
             expiredMessages.map((x) => x.id),
           ),
-        )
+        );
       if (expiredEncounters.length)
         await this.database.delete(encounterParticipants).where(
           inArray(
             encounterParticipants.encounterId,
             expiredEncounters.map((x) => x.id),
           ),
-        )
+        );
       if (expiredEncounters.length)
         await this.database.delete(encounters).where(
           inArray(
             encounters.id,
             expiredEncounters.map((x) => x.id),
           ),
-        )
+        );
     }
     return {
       expiredMessages: expiredMessages.length,
@@ -440,15 +440,15 @@ export class EncounterRepository {
             ),
           )
         : 0,
-    }
+    };
   }
 }
 
 function encodeCursor(date: Date) {
-  return Buffer.from(date.toISOString()).toString('base64url')
+  return Buffer.from(date.toISOString()).toString("base64url");
 }
 function decodeCursor(value: string) {
-  const date = new Date(Buffer.from(value, 'base64url').toString('utf8'))
-  if (!Number.isFinite(date.getTime())) throw new Error('invalid_cursor')
-  return date
+  const date = new Date(Buffer.from(value, "base64url").toString("utf8"));
+  if (!Number.isFinite(date.getTime())) throw new Error("invalid_cursor");
+  return date;
 }

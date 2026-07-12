@@ -1,22 +1,22 @@
-import { AppFrame, Avatar, Badge } from '@strangr/ui'
-import { NavLink, Outlet } from 'react-router-dom'
+import { AppFrame, Avatar, Badge } from "@paramingle/ui";
+import { NavLink, Outlet } from "react-router-dom";
 
 const links = [
-  { to: '/admin', label: 'Case queue', end: true },
-  { to: '/admin/users', label: 'User lookup' },
-  { to: '/admin/appeals', label: 'Appeals' },
-  { to: '/admin/catalog', label: 'Catalog' },
-  { to: '/admin/audit', label: 'Audit' },
-  { to: '/admin/health', label: 'Health' },
-]
+  { to: "/admin", label: "Case queue", end: true },
+  { to: "/admin/users", label: "User lookup" },
+  { to: "/admin/appeals", label: "Appeals" },
+  { to: "/admin/catalog", label: "Catalog" },
+  { to: "/admin/audit", label: "Audit" },
+  { to: "/admin/health", label: "Health" },
+];
 
 function Navigation({ mobile = false }: { mobile?: boolean }) {
-  const visible = mobile ? links.slice(0, 4) : links
+  const visible = mobile ? links.slice(0, 4) : links;
   return (
-    <div className={mobile ? 'admin-mobile-links' : 'admin-links'}>
+    <div className={mobile ? "admin-mobile-links" : "admin-links"}>
       {visible.map((link) => (
         <NavLink
-          className={({ isActive }) => (isActive ? 'is-active' : undefined)}
+          className={({ isActive }) => (isActive ? "is-active" : undefined)}
           {...(link.end ? { end: true } : {})}
           key={link.to}
           to={link.to}
@@ -26,7 +26,7 @@ function Navigation({ mobile = false }: { mobile?: boolean }) {
         </NavLink>
       ))}
     </div>
-  )
+  );
 }
 
 export function AdminLayout() {
@@ -44,12 +44,14 @@ export function AdminLayout() {
         <>
           <p className="admin-nav-label">MODERATION</p>
           <Navigation />
-          <p className="admin-boundary-note">This shell never shares user-app session state.</p>
+          <p className="admin-boundary-note">
+            This shell never shares user-app session state.
+          </p>
         </>
       }
-      productName="STRANGR ADMIN"
+      productName="PARAMINGLE ADMIN"
     >
       <Outlet />
     </AppFrame>
-  )
+  );
 }

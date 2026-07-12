@@ -1,6 +1,6 @@
-import { and, asc, eq, gt, inArray, lt, or, sql } from 'drizzle-orm'
-import { alias } from 'drizzle-orm/pg-core'
-import type { Database } from './client.js'
+import { and, asc, eq, gt, inArray, lt, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import type { Database } from "./client.js";
 import {
   blocks,
   encounterParticipants,
@@ -12,17 +12,17 @@ import {
   profiles,
   threadMembers,
   threads,
-} from './schema.js'
+} from "./schema.js";
 
-const REQUEST_PURGE_MS = 30 * 24 * 60 * 60 * 1000
-type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0]
+const REQUEST_PURGE_MS = 30 * 24 * 60 * 60 * 1000;
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
 export type FriendMutation = {
-  state: 'pending' | 'friends'
-  requestId?: string
-  friendshipId?: string
-}
+  state: "pending" | "friends";
+  requestId?: string;
+  friendshipId?: string;
+};
 const pair = (a: string, b: string) =>
-  a < b ? ([a, b] as const) : ([b, a] as const)
+  a < b ? ([a, b] as const) : ([b, a] as const);
 
 export class FriendRepository {
   constructor(private readonly db: Database) {}
@@ -33,14 +33,14 @@ export class FriendRepository {
     encounterId: string,
     now = new Date(),
   ): Promise<FriendMutation> {
-    if (senderId === recipientId) throw new Error('self_request')
+    if (senderId === recipientId) throw new Error("self_request");
     return this.db.transaction(async (tx) => {
-      const [first, second] = pair(senderId, recipientId)
+      const [first, second] = pair(senderId, recipientId);
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtext(${`${first}:${second}`}))`,
-      )
+      );
       if (await relationBlocked(tx, senderId, recipientId))
-        throw new Error('relationship_unavailable')
+        throw new Error("relationship_unavailable");
       const [eligible] = await tx
         .select({ id: encounters.id })
         .from(encounters)
@@ -56,14 +56,14 @@ export class FriendRepository {
             sql`exists(select 1 from encounter_participants ep where ep.encounter_id=${encounters.id} and ep.user_id=${recipientId})`,
           ),
         )
-        .limit(1)
-      if (!eligible) throw new Error('encounter_unavailable')
+        .limit(1);
+      if (!eligible) throw new Error("encounter_unavailable");
       const [privacy] = await tx
         .select({ allowed: privacySettings.allowEncounterRequests })
         .from(privacySettings)
         .where(eq(privacySettings.userId, recipientId))
-        .limit(1)
-      if (!privacy?.allowed) throw new Error('requests_disabled')
+        .limit(1);
+      if (!privacy?.allowed) throw new Error("requests_disabled");
       const [existingFriend] = await tx
         .select({ id: friendships.id })
         .from(friendships)
@@ -71,12 +71,12 @@ export class FriendRepository {
           and(
             eq(friendships.firstUserId, first),
             eq(friendships.secondUserId, second),
-            eq(friendships.state, 'active'),
+            eq(friendships.state, "active"),
           ),
         )
-        .limit(1)
+        .limit(1);
       if (existingFriend)
-        return { state: 'friends', friendshipId: existingFriend.id }
+        return { state: "friends", friendshipId: existingFriend.id };
       const [opposite] = await tx
         .select({ id: friendRequests.id })
         .from(friendRequests)
@@ -84,25 +84,25 @@ export class FriendRepository {
           and(
             eq(friendRequests.senderId, recipientId),
             eq(friendRequests.recipientId, senderId),
-            eq(friendRequests.state, 'pending'),
+            eq(friendRequests.state, "pending"),
             gt(friendRequests.expiresAt, now),
           ),
         )
-        .for('update')
-        .limit(1)
+        .for("update")
+        .limit(1);
       if (opposite) {
         await tx
           .update(friendRequests)
-          .set({ state: 'accepted', resolvedAt: now, updatedAt: now })
-          .where(eq(friendRequests.id, opposite.id))
+          .set({ state: "accepted", resolvedAt: now, updatedAt: now })
+          .where(eq(friendRequests.id, opposite.id));
         const friendship = await createFriendship(
           tx,
           first,
           second,
           encounterId,
           now,
-        )
-        return { state: 'friends', friendshipId: friendship.id }
+        );
+        return { state: "friends", friendshipId: friendship.id };
       }
       const expiresAt = new Date(
         Math.min(
@@ -115,7 +115,7 @@ export class FriendRepository {
               .limit(1)
           )[0]!.until.getTime(),
         ),
-      )
+      );
       const [request] = await tx
         .insert(friendRequests)
         .values({
@@ -126,8 +126,8 @@ export class FriendRepository {
           purgeAt: new Date(expiresAt.getTime() + REQUEST_PURGE_MS),
         })
         .onConflictDoNothing()
-        .returning({ id: friendRequests.id })
-      if (request) return { state: 'pending', requestId: request.id }
+        .returning({ id: friendRequests.id });
+      if (request) return { state: "pending", requestId: request.id };
       const [same] = await tx
         .select({ id: friendRequests.id })
         .from(friendRequests)
@@ -135,18 +135,18 @@ export class FriendRepository {
           and(
             eq(friendRequests.senderId, senderId),
             eq(friendRequests.recipientId, recipientId),
-            eq(friendRequests.state, 'pending'),
+            eq(friendRequests.state, "pending"),
           ),
         )
-        .limit(1)
-      return { state: 'pending', requestId: same!.id }
-    })
+        .limit(1);
+      return { state: "pending", requestId: same!.id };
+    });
   }
 
   async resolve(
     actorId: string,
     requestId: string,
-    action: 'accept' | 'reject' | 'cancel',
+    action: "accept" | "reject" | "cancel",
     now = new Date(),
   ) {
     return this.db.transaction(async (tx) => {
@@ -154,46 +154,46 @@ export class FriendRepository {
         .select()
         .from(friendRequests)
         .where(eq(friendRequests.id, requestId))
-        .for('update')
-        .limit(1)
-      if (!request || request.state !== 'pending')
-        throw new Error('request_unavailable')
+        .for("update")
+        .limit(1);
+      if (!request || request.state !== "pending")
+        throw new Error("request_unavailable");
       if (
-        action === 'cancel'
+        action === "cancel"
           ? request.senderId !== actorId
           : request.recipientId !== actorId
       )
-        throw new Error('request_unavailable')
+        throw new Error("request_unavailable");
       if (request.expiresAt <= now) {
         await tx
           .update(friendRequests)
-          .set({ state: 'expired', resolvedAt: now, updatedAt: now })
-          .where(eq(friendRequests.id, request.id))
-        throw new Error('request_expired')
+          .set({ state: "expired", resolvedAt: now, updatedAt: now })
+          .where(eq(friendRequests.id, request.id));
+        throw new Error("request_expired");
       }
       if (await relationBlocked(tx, request.senderId, request.recipientId))
-        throw new Error('relationship_unavailable')
-      if (action !== 'accept') {
+        throw new Error("relationship_unavailable");
+      if (action !== "accept") {
         await tx
           .update(friendRequests)
           .set({
-            state: action === 'reject' ? 'rejected' : 'cancelled',
+            state: action === "reject" ? "rejected" : "cancelled",
             resolvedAt: now,
             updatedAt: now,
           })
-          .where(eq(friendRequests.id, request.id))
-        return { state: action }
+          .where(eq(friendRequests.id, request.id));
+        return { state: action };
       }
-      const [first, second] = pair(request.senderId, request.recipientId)
+      const [first, second] = pair(request.senderId, request.recipientId);
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtext(${`${first}:${second}`}))`,
-      )
+      );
       await tx
         .update(friendRequests)
-        .set({ state: 'accepted', resolvedAt: now, updatedAt: now })
-        .where(eq(friendRequests.id, request.id))
+        .set({ state: "accepted", resolvedAt: now, updatedAt: now })
+        .where(eq(friendRequests.id, request.id));
       return {
-        state: 'friends',
+        state: "friends",
         friendshipId: (
           await createFriendship(
             tx,
@@ -203,12 +203,12 @@ export class FriendRepository {
             now,
           )
         ).id,
-      }
-    })
+      };
+    });
   }
 
   async requests(userId: string) {
-    const sender = alias(profiles, 'request_sender')
+    const sender = alias(profiles, "request_sender");
     return this.db
       .select({
         id: friendRequests.id,
@@ -223,64 +223,64 @@ export class FriendRepository {
       .where(
         and(
           eq(friendRequests.recipientId, userId),
-          eq(friendRequests.state, 'pending'),
+          eq(friendRequests.state, "pending"),
           gt(friendRequests.expiresAt, new Date()),
           sql`not exists(select 1 from blocks b where (b.blocker_id=${userId} and b.blocked_id=${sender.userId}) or (b.blocker_id=${sender.userId} and b.blocked_id=${userId})`,
         ),
       )
-      .orderBy(asc(friendRequests.createdAt))
+      .orderBy(asc(friendRequests.createdAt));
   }
 
   async list(userId: string, cursor?: string, limit = 50) {
     const after = cursor
-      ? Buffer.from(cursor, 'base64url').toString('utf8')
-      : ''
+      ? Buffer.from(cursor, "base64url").toString("utf8")
+      : "";
     const rows = await this.db.execute<{
-      id: string
-      user_id: string
-      username: string
-      normalized_username: string
-      display_name: string
-      show_presence: boolean
+      id: string;
+      user_id: string;
+      username: string;
+      normalized_username: string;
+      display_name: string;
+      show_presence: boolean;
     }>(
       sql`select f.id, p.user_id, p.username, p.normalized_username, p.display_name, coalesce(ps.show_presence,false) show_presence from friendships f join profiles p on p.user_id=case when f.first_user_id=${userId} then f.second_user_id else f.first_user_id end left join privacy_settings ps on ps.user_id=p.user_id where f.state='active' and (${userId}=f.first_user_id or ${userId}=f.second_user_id) and p.normalized_username > ${after} and not exists(select 1 from blocks b where (b.blocker_id=${userId} and b.blocked_id=p.user_id) or (b.blocker_id=p.user_id and b.blocked_id=${userId})) order by p.normalized_username limit ${limit + 1}`,
-    )
+    );
     return {
       items: rows.rows.slice(0, limit),
       nextCursor:
         rows.rows.length > limit
           ? Buffer.from(rows.rows[limit - 1]!.normalized_username).toString(
-              'base64url',
+              "base64url",
             )
           : null,
-    }
+    };
   }
 
   async unfriend(actorId: string, friendshipId: string, now = new Date()) {
     const result = await this.db
       .update(friendships)
-      .set({ state: 'ended', endedAt: now, updatedAt: now })
+      .set({ state: "ended", endedAt: now, updatedAt: now })
       .where(
         and(
           eq(friendships.id, friendshipId),
-          eq(friendships.state, 'active'),
+          eq(friendships.state, "active"),
           or(
             eq(friendships.firstUserId, actorId),
             eq(friendships.secondUserId, actorId),
           ),
         ),
       )
-      .returning({ id: friendships.id })
-    return result.length > 0
+      .returning({ id: friendships.id });
+    return result.length > 0;
   }
 
   async mute(
     actorId: string,
     targetId: string,
-    scope: 'all' | 'messages' | 'calls',
+    scope: "all" | "messages" | "calls",
     expiresAt?: Date,
   ) {
-    if (actorId === targetId) throw new Error('self_mute')
+    if (actorId === targetId) throw new Error("self_mute");
     await this.db
       .insert(mutes)
       .values({
@@ -292,12 +292,12 @@ export class FriendRepository {
       .onConflictDoUpdate({
         target: [mutes.muterId, mutes.mutedId, mutes.scope],
         set: { expiresAt: expiresAt ?? null, updatedAt: new Date() },
-      })
+      });
   }
   async unmute(
     actorId: string,
     targetId: string,
-    scope: 'all' | 'messages' | 'calls',
+    scope: "all" | "messages" | "calls",
   ) {
     await this.db
       .delete(mutes)
@@ -307,7 +307,7 @@ export class FriendRepository {
           eq(mutes.mutedId, targetId),
           eq(mutes.scope, scope),
         ),
-      )
+      );
   }
   async counts(userId: string) {
     const [requests] = await this.db
@@ -316,19 +316,19 @@ export class FriendRepository {
       .where(
         and(
           eq(friendRequests.recipientId, userId),
-          eq(friendRequests.state, 'pending'),
+          eq(friendRequests.state, "pending"),
           gt(friendRequests.expiresAt, new Date()),
         ),
-      )
-    return { incomingRequests: requests?.count ?? 0, unreadMessages: 0 }
+      );
+    return { incomingRequests: requests?.count ?? 0, unreadMessages: 0 };
   }
   async presenceViewers(subjectId: string) {
     const [privacy] = await this.db
       .select({ show: privacySettings.showPresence })
       .from(privacySettings)
       .where(eq(privacySettings.userId, subjectId))
-      .limit(1)
-    if (!privacy?.show) return []
+      .limit(1);
+    if (!privacy?.show) return [];
     const rows = await this.db
       .select({
         first: friendships.firstUserId,
@@ -337,17 +337,17 @@ export class FriendRepository {
       .from(friendships)
       .where(
         and(
-          eq(friendships.state, 'active'),
+          eq(friendships.state, "active"),
           or(
             eq(friendships.firstUserId, subjectId),
             eq(friendships.secondUserId, subjectId),
           ),
         ),
-      )
+      );
     const candidates = rows.map((row) =>
       row.first === subjectId ? row.second : row.first,
-    )
-    const allowed: string[] = []
+    );
+    const allowed: string[] = [];
     for (const viewer of candidates)
       if (
         !(await relationBlocked(
@@ -356,8 +356,8 @@ export class FriendRepository {
           viewer,
         ))
       )
-        allowed.push(viewer)
-    return allowed
+        allowed.push(viewer);
+    return allowed;
   }
   async cleanup(batch = 500, now = new Date(), dryRun = false) {
     const expired = await this.db
@@ -365,40 +365,40 @@ export class FriendRepository {
       .from(friendRequests)
       .where(
         and(
-          eq(friendRequests.state, 'pending'),
+          eq(friendRequests.state, "pending"),
           lt(friendRequests.expiresAt, now),
         ),
       )
-      .limit(batch)
+      .limit(batch);
     const purge = await this.db
       .select({ id: friendRequests.id })
       .from(friendRequests)
       .where(lt(friendRequests.purgeAt, now))
-      .limit(batch)
+      .limit(batch);
     if (!dryRun) {
       if (expired.length)
         await this.db
           .update(friendRequests)
-          .set({ state: 'expired', resolvedAt: now, updatedAt: now })
+          .set({ state: "expired", resolvedAt: now, updatedAt: now })
           .where(
             inArray(
               friendRequests.id,
               expired.map((x) => x.id),
             ),
-          )
+          );
       if (purge.length)
         await this.db.delete(friendRequests).where(
           inArray(
             friendRequests.id,
             purge.map((x) => x.id),
           ),
-        )
+        );
     }
     return {
       expiredRequests: expired.length,
       purgedRequests: purge.length,
       dryRun,
-    }
+    };
   }
 }
 
@@ -412,8 +412,8 @@ async function relationBlocked(tx: Transaction, first: string, second: string) {
         and(eq(blocks.blockerId, second), eq(blocks.blockedId, first)),
       ),
     )
-    .limit(1)
-  return rows.length > 0
+    .limit(1);
+  return rows.length > 0;
 }
 async function createFriendship(
   tx: Transaction,
@@ -429,20 +429,20 @@ async function createFriendship(
       and(
         eq(friendships.firstUserId, first),
         eq(friendships.secondUserId, second),
-        eq(friendships.state, 'active'),
+        eq(friendships.state, "active"),
       ),
     )
-    .limit(1)
-  if (existing) return existing
+    .limit(1);
+  if (existing) return existing;
   const [thread] = await tx
     .insert(threads)
-    .values({ type: 'direct' })
-    .returning({ id: threads.id })
-  if (!thread) throw new Error('thread_insert_failed')
+    .values({ type: "direct" })
+    .returning({ id: threads.id });
+  if (!thread) throw new Error("thread_insert_failed");
   await tx.insert(threadMembers).values([
     { threadId: thread.id, userId: first },
     { threadId: thread.id, userId: second },
-  ])
+  ]);
   const [friendship] = await tx
     .insert(friendships)
     .values({
@@ -453,7 +453,7 @@ async function createFriendship(
       createdAt: now,
       updatedAt: now,
     })
-    .returning({ id: friendships.id })
-  if (!friendship) throw new Error('friendship_insert_failed')
-  return friendship
+    .returning({ id: friendships.id });
+  if (!friendship) throw new Error("friendship_insert_failed");
+  return friendship;
 }

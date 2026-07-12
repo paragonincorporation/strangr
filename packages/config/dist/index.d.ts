@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 declare const commonServerSchema: z.ZodObject<{
     NODE_ENV: z.ZodDefault<z.ZodEnum<{
         development: "development";
@@ -41,6 +41,8 @@ declare const commonServerSchema: z.ZodObject<{
         true: "true";
         false: "false";
     }>>, z.ZodTransform<boolean, "true" | "false">>;
+    MESSAGE_DELETE_FOR_EVERYONE_SECONDS: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
+    DIRECT_CALL_RING_SECONDS: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
 }, z.core.$strip>;
 export type ServerConfig = z.infer<typeof commonServerSchema>;
 export declare function parseServerConfig(environment: Record<string, string | undefined>): ServerConfig;

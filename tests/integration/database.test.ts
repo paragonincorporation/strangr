@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { randomUUID } from "node:crypto";
 import {
   createAesGcmFieldEncryptor,
   createDatabase,
@@ -11,95 +11,95 @@ import {
   privacySettings,
   friendships,
   friendRequests,
-} from '@strangr/database'
-import { sql } from 'drizzle-orm'
-import { afterAll, beforeEach, describe, expect, test } from 'vitest'
+} from "@paramingle/database";
+import { sql } from "drizzle-orm";
+import { afterAll, beforeEach, describe, expect, test } from "vitest";
 
 const databaseUrl =
   process.env.DATABASE_URL ??
-  'postgresql://strangr:strangr_local_only@localhost:5432/strangr'
-const { db, pool } = createDatabase(databaseUrl)
+  "postgresql://paramingle:paramingle_local_only@localhost:5432/paramingle";
+const { db, pool } = createDatabase(databaseUrl);
 const encryptor = createAesGcmFieldEncryptor(
   new Uint8Array(32).fill(9),
-  'integration-v1',
-)
-const identities = new IdentityRepository(db, encryptor)
-const profileRepository = new ProfileRepository(db)
-const encounters = new EncounterRepository(db)
-const blocks = new BlockRepository(db)
-const friends = new FriendRepository(db)
+  "integration-v1",
+);
+const identities = new IdentityRepository(db, encryptor);
+const profileRepository = new ProfileRepository(db);
+const encounters = new EncounterRepository(db);
+const blocks = new BlockRepository(db);
+const friends = new FriendRepository(db);
 
 beforeEach(async () => {
-  await db.execute(sql`truncate table encounters, users cascade`)
-})
+  await db.execute(sql`truncate table encounters, users cascade`);
+});
 
-describe('encounter retention and blocks', () => {
+describe("encounter retention and blocks", () => {
   async function people() {
-    const first = await identities.create({ authSubject: randomUUID() })
-    const second = await identities.create({ authSubject: randomUUID() })
+    const first = await identities.create({ authSubject: randomUUID() });
+    const second = await identities.create({ authSubject: randomUUID() });
     await profileRepository.create(
       first.id,
       `first_${first.id.slice(0, 6)}`,
-      'First',
-    )
+      "First",
+    );
     await profileRepository.create(
       second.id,
       `second_${second.id.slice(0, 6)}`,
-      'Second',
-    )
-    return [first.id, second.id] as const
+      "Second",
+    );
+    return [first.id, second.id] as const;
   }
 
-  test('persists one idempotent encounter and ordered random text without media payloads', async () => {
-    const [first, second] = await people()
-    const id = randomUUID()
-    const now = new Date('2026-07-12T00:00:00.000Z')
+  test("persists one idempotent encounter and ordered random text without media payloads", async () => {
+    const [first, second] = await people();
+    const id = randomUUID();
+    const now = new Date("2026-07-12T00:00:00.000Z");
     await Promise.all([
-      encounters.start(id, 'text', [first, second], now),
-      encounters.start(id, 'text', [first, second], now),
-    ])
-    const messageId = randomUUID()
+      encounters.start(id, "text", [first, second], now),
+      encounters.start(id, "text", [first, second], now),
+    ]);
+    const messageId = randomUUID();
     const message = await encounters.addRandomMessage(
       id,
       first,
       messageId,
       1,
-      '  hello <b>plain</b>  ',
+      "  hello <b>plain</b>  ",
       now,
-    )
+    );
     const page = await encounters.list(
       first,
       undefined,
       20,
       new Date(now.getTime() + 1),
-    )
-    expect(page.items).toHaveLength(1)
-    expect(JSON.stringify(page)).not.toMatch(/sdp|ice|audio|video.*content/i)
+    );
+    expect(page.items).toHaveLength(1);
+    expect(JSON.stringify(page)).not.toMatch(/sdp|ice|audio|video.*content/i);
     await encounters.preserveEvidence(
       id,
       message.id,
-      'user_report',
-      new Date('2026-08-12T00:00:00.000Z'),
-    )
+      "user_report",
+      new Date("2026-08-12T00:00:00.000Z"),
+    );
     const cleanup = await encounters.cleanupExpired(
       500,
       new Date(now.getTime() + 48 * 60 * 60 * 1000 + 1),
-    )
-    expect(cleanup.expiredMessages).toBe(1)
-    const evidence = await db.execute(sql`select excerpt from report_evidence`)
-    expect(evidence.rows).toHaveLength(1)
-  })
+    );
+    expect(cleanup.expiredMessages).toBe(1);
+    const evidence = await db.execute(sql`select excerpt from report_evidence`);
+    expect(evidence.rows).toHaveLength(1);
+  });
 
-  test('hides for one participant, enforces either-direction block, and deletes at the exact boundary', async () => {
-    const [first, second] = await people()
-    const id = randomUUID()
-    const now = new Date('2026-07-12T00:00:00.000Z')
-    await encounters.start(id, 'text', [first, second], now)
-    await encounters.hide(first, id)
+  test("hides for one participant, enforces either-direction block, and deletes at the exact boundary", async () => {
+    const [first, second] = await people();
+    const id = randomUUID();
+    const now = new Date("2026-07-12T00:00:00.000Z");
+    await encounters.start(id, "text", [first, second], now);
+    await encounters.hide(first, id);
     expect(
       (await encounters.list(first, undefined, 20, new Date(now.getTime() + 1)))
         .items,
-    ).toHaveLength(0)
+    ).toHaveLength(0);
     expect(
       (
         await encounters.list(
@@ -109,83 +109,88 @@ describe('encounter retention and blocks', () => {
           new Date(now.getTime() + 1),
         )
       ).items,
-    ).toHaveLength(1)
-    await blocks.create(first, second, 'safety')
-    expect(await blocks.hasEitherDirection(second, first)).toBe(true)
-    const atBoundary = new Date(now.getTime() + 48 * 60 * 60 * 1000)
+    ).toHaveLength(1);
+    await blocks.create(first, second, "safety");
+    expect(await blocks.hasEitherDirection(second, first)).toBe(true);
+    const atBoundary = new Date(now.getTime() + 48 * 60 * 60 * 1000);
     const result = await encounters.cleanupExpired(
       500,
       new Date(atBoundary.getTime() + 1),
-    )
-    expect(result.expiredEncounters).toBe(1)
-  })
+    );
+    expect(result.expiredEncounters).toBe(1);
+  });
 
-  test('rejects self-blocks and treats opposite simultaneous blocks as idempotent pair records', async () => {
-    const [first, second] = await people()
-    await expect(blocks.create(first, first, 'other')).rejects.toThrow(
-      'self_block',
-    )
+  test("rejects self-blocks and treats opposite simultaneous blocks as idempotent pair records", async () => {
+    const [first, second] = await people();
+    await expect(blocks.create(first, first, "other")).rejects.toThrow(
+      "self_block",
+    );
     await Promise.all([
-      blocks.create(first, second, 'spam'),
-      blocks.create(second, first, 'safety'),
-    ])
-    expect(await blocks.hasEitherDirection(first, second)).toBe(true)
-  })
-})
+      blocks.create(first, second, "spam"),
+      blocks.create(second, first, "safety"),
+    ]);
+    expect(await blocks.hasEitherDirection(first, second)).toBe(true);
+  });
+});
 
-describe('friend requests and friendships', () => {
-  async function eligiblePeople(now = new Date('2026-07-12T00:00:00.000Z')) {
-    const first = await identities.create({ authSubject: randomUUID() })
-    const second = await identities.create({ authSubject: randomUUID() })
+describe("friend requests and friendships", () => {
+  async function eligiblePeople(now = new Date("2026-07-12T00:00:00.000Z")) {
+    const first = await identities.create({ authSubject: randomUUID() });
+    const second = await identities.create({ authSubject: randomUUID() });
     await profileRepository.create(
       first.id,
       `friend_${first.id.slice(0, 6)}`,
-      'First friend',
-    )
+      "First friend",
+    );
     await profileRepository.create(
       second.id,
       `friend_${second.id.slice(0, 6)}`,
-      'Second friend',
-    )
+      "Second friend",
+    );
     await db
       .insert(privacySettings)
-      .values([{ userId: first.id }, { userId: second.id }])
-    const encounterId = randomUUID()
-    await encounters.start(encounterId, 'text', [first.id, second.id], now)
-    return { first: first.id, second: second.id, encounterId, now }
+      .values([{ userId: first.id }, { userId: second.id }]);
+    const encounterId = randomUUID();
+    await encounters.start(encounterId, "text", [first.id, second.id], now);
+    return { first: first.id, second: second.id, encounterId, now };
   }
 
-  test('crossing requests create exactly one friendship and direct thread', async () => {
-    const { first, second, encounterId, now } = await eligiblePeople()
+  test("crossing requests create exactly one friendship and direct thread", async () => {
+    const { first, second, encounterId, now } = await eligiblePeople();
     expect(
       (await friends.createRequest(first, second, encounterId, now)).state,
-    ).toBe('pending')
+    ).toBe("pending");
     expect(
       (await friends.createRequest(second, first, encounterId, now)).state,
-    ).toBe('friends')
-    expect(await db.select().from(friendships)).toHaveLength(1)
-    expect((await friends.list(first)).items).toHaveLength(1)
-  })
+    ).toBe("friends");
+    expect(await db.select().from(friendships)).toHaveLength(1);
+    expect((await friends.list(first)).items).toHaveLength(1);
+  });
 
-  test('accept is transaction-safe and block remains dominant', async () => {
-    const { first, second, encounterId, now } = await eligiblePeople()
-    const created = await friends.createRequest(first, second, encounterId, now)
+  test("accept is transaction-safe and block remains dominant", async () => {
+    const { first, second, encounterId, now } = await eligiblePeople();
+    const created = await friends.createRequest(
+      first,
+      second,
+      encounterId,
+      now,
+    );
     const results = await Promise.allSettled([
-      friends.resolve(second, created.requestId!, 'accept', now),
-      friends.resolve(second, created.requestId!, 'accept', now),
-    ])
+      friends.resolve(second, created.requestId!, "accept", now),
+      friends.resolve(second, created.requestId!, "accept", now),
+    ]);
     expect(
-      results.filter((result) => result.status === 'fulfilled'),
-    ).toHaveLength(1)
-    expect(await db.select().from(friendships)).toHaveLength(1)
-    await blocks.create(first, second, 'safety')
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(await db.select().from(friendships)).toHaveLength(1);
+    await blocks.create(first, second, "safety");
     await expect(
       friends.createRequest(first, second, encounterId, now),
-    ).rejects.toThrow('relationship_unavailable')
-  })
+    ).rejects.toThrow("relationship_unavailable");
+  });
 
-  test('rejects expired/outside-window requests and cleans request records after 30 days', async () => {
-    const { first, second, encounterId, now } = await eligiblePeople()
+  test("rejects expired/outside-window requests and cleans request records after 30 days", async () => {
+    const { first, second, encounterId, now } = await eligiblePeople();
     await expect(
       friends.createRequest(
         first,
@@ -193,56 +198,61 @@ describe('friend requests and friendships', () => {
         encounterId,
         new Date(now.getTime() + 48 * 60 * 60 * 1000 + 1),
       ),
-    ).rejects.toThrow('encounter_unavailable')
-    const created = await friends.createRequest(first, second, encounterId, now)
-    await friends.resolve(second, created.requestId!, 'reject', now)
+    ).rejects.toThrow("encounter_unavailable");
+    const created = await friends.createRequest(
+      first,
+      second,
+      encounterId,
+      now,
+    );
+    await friends.resolve(second, created.requestId!, "reject", now);
     const cleanup = await friends.cleanup(
       500,
       new Date(now.getTime() + 33 * 24 * 60 * 60 * 1000),
-    )
-    expect(cleanup.purgedRequests).toBe(1)
-    expect(await db.select().from(friendRequests)).toHaveLength(0)
-  })
-})
+    );
+    expect(cleanup.purgedRequests).toBe(1);
+    expect(await db.select().from(friendRequests)).toHaveLength(0);
+  });
+});
 afterAll(async () => {
-  await pool.end()
-})
+  await pool.end();
+});
 
-describe('identity persistence', () => {
-  test('encrypts birth date and omits it from public serialization', async () => {
+describe("identity persistence", () => {
+  test("encrypts birth date and omits it from public serialization", async () => {
     const identity = await identities.create({
       authSubject: randomUUID(),
-      birthDate: '2000-01-02',
-      cohort: 'adult_18_plus',
-    })
-    const raw = await db.select().from(users)
-    expect(raw[0]?.birthDateCiphertext).not.toContain('2000-01-02')
-    const publicAccount = await identities.findPublicAccount(identity.id)
-    expect(JSON.stringify(publicAccount)).not.toContain('birthDate')
-    expect(publicAccount?.ageCohort).toBe('adult_18_plus')
-  })
+      birthDate: "2000-01-02",
+      cohort: "adult_18_plus",
+    });
+    const raw = await db.select().from(users);
+    expect(raw[0]?.birthDateCiphertext).not.toContain("2000-01-02");
+    const publicAccount = await identities.findPublicAccount(identity.id);
+    expect(JSON.stringify(publicAccount)).not.toContain("birthDate");
+    expect(publicAccount?.ageCohort).toBe("adult_18_plus");
+  });
 
-  test('lets the unique normalized username constraint decide a race', async () => {
-    const first = await identities.create({ authSubject: randomUUID() })
-    const second = await identities.create({ authSubject: randomUUID() })
+  test("lets the unique normalized username constraint decide a race", async () => {
+    const first = await identities.create({ authSubject: randomUUID() });
+    const second = await identities.create({ authSubject: randomUUID() });
     const results = await Promise.allSettled([
-      profileRepository.create(first.id, 'Ada_One', 'Ada'),
-      profileRepository.create(second.id, 'ada_one', 'Other Ada'),
-    ])
+      profileRepository.create(first.id, "Ada_One", "Ada"),
+      profileRepository.create(second.id, "ada_one", "Other Ada"),
+    ]);
     expect(
-      results.filter((result) => result.status === 'fulfilled'),
-    ).toHaveLength(1)
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
     expect(
-      results.filter((result) => result.status === 'rejected'),
-    ).toHaveLength(1)
-  })
+      results.filter((result) => result.status === "rejected"),
+    ).toHaveLength(1);
+  });
 
-  test('enforces complete birth-date encryption metadata', async () => {
+  test("enforces complete birth-date encryption metadata", async () => {
     await expect(
       db.insert(users).values({
         authSubject: randomUUID(),
-        birthDateCiphertext: 'ciphertext',
+        birthDateCiphertext: "ciphertext",
       }),
-    ).rejects.toThrow()
-  })
-})
+    ).rejects.toThrow();
+  });
+});

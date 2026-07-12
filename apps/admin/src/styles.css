@@ -16,7 +16,11 @@
   place-items: center;
   padding: 1rem;
   background:
-    radial-gradient(circle at 15% 10%, rgba(255, 83, 103, 0.08), transparent 32rem),
+    radial-gradient(
+      circle at 15% 10%,
+      rgba(255, 83, 103, 0.08),
+      transparent 32rem
+    ),
     var(--color-base);
 }
 .admin-login__card {
