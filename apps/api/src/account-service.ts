@@ -10,6 +10,7 @@ import {
   termsAcceptances,
   userSessions,
   userSettings,
+  userCountryState,
   users,
 } from "@paramingle/database";
 import type {
@@ -503,6 +504,37 @@ export class AccountService {
       .limit(1);
     if (!owner) throw new DomainError("not_found", "Avatar unavailable", 404);
     return owner.userId;
+  }
+  async safeCallCard(
+    subjectId: string,
+    revealSource: "subject_consent" | "maxed_entitlement",
+  ) {
+    const [profile] = await this.db
+      .select({
+        username: profiles.username,
+        displayName: profiles.displayName,
+        avatarObjectKey: profiles.avatarObjectKey,
+        country: userCountryState.lastObservedCountry,
+        language: profiles.language,
+        interests: profiles.interests,
+      })
+      .from(profiles)
+      .innerJoin(userCountryState, eq(userCountryState.userId, profiles.userId))
+      .where(eq(profiles.userId, subjectId))
+      .limit(1);
+    if (!profile)
+      throw new DomainError("not_found", "Call card unavailable", 404);
+    return {
+      username: profile.username,
+      displayName: profile.displayName,
+      avatarUrl: profile.avatarObjectKey
+        ? `/v1/profiles/${encodeURIComponent(profile.username)}/avatar`
+        : null,
+      country: profile.country,
+      language: profile.language,
+      interests: profile.interests,
+      revealSource,
+    };
   }
 }
 function serializeProfile(

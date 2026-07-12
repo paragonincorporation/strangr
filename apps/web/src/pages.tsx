@@ -334,6 +334,13 @@ export function OnboardingPage() {
           Paramingle beta is for adults 18 and older. Your exact birthday stays
           encrypted and private.
         </p>
+        <p className="muted">
+          Calls are not recorded. You choose when to share your safe call card;
+          a Maxed Out participant may see that limited card when a match
+          connects. It contains only your avatar, username, display name,
+          country, language, and interests—never your birthday, email, bio, or
+          account records.
+        </p>
         <form onSubmit={(event) => void submit(event)}>
           <Input
             label="Date of birth"
@@ -996,6 +1003,11 @@ export function SettingsPage() {
           accessibility, and history are initialized with onboarding and
           enforced by the API.
         </p>
+        <p>
+          Random calls begin anonymous unless you share your safe call card.
+          Maxed Out participants may receive that limited card automatically for
+          the current encounter. Blocking immediately ends access.
+        </p>
         <Button onClick={() => void signOut()} variant="secondary">
           Sign out
         </Button>
@@ -1507,6 +1519,17 @@ export function ConversationPage() {
   const [toast, setToast] = useState<string>();
   const [matchId, setMatchId] = useState<string>();
   const [peerId, setPeerId] = useState<string>();
+  const [endedEncounterId, setEndedEncounterId] = useState<string>();
+  const [ratingEligibleAt, setRatingEligibleAt] = useState<number | null>(null);
+  const [ratingSubmitted, setRatingSubmitted] = useState<"like" | "dislike">();
+  const [callCard, setCallCard] = useState<{
+    username: string;
+    displayName: string;
+    country: string;
+    language: string | null;
+    interests: string[];
+    avatarUrl: string | null;
+  }>();
   const matchIdRef = useRef<string | undefined>(undefined);
   const [messages, setMessages] = useState<
     Array<{ id: string; text: string; mine: boolean }>
@@ -1540,6 +1563,16 @@ export function ConversationPage() {
           setSkipAllowedAt(
             typeof unlock === "string" ? new Date(unlock).getTime() : null,
           );
+          const connected = event.payload.connectedAt;
+          if (typeof connected === "string")
+            setRatingEligibleAt(new Date(connected).getTime() + 120_000);
+        } else if (event.type === "session.timer") {
+          const eligible = event.payload.ratingEligibleAt;
+          if (typeof eligible === "string")
+            setRatingEligibleAt(new Date(eligible).getTime());
+        } else if (event.type === "session.identity_revealed") {
+          setCallCard(event.payload.card as typeof callCard);
+          setToast("This person shared their safe call card.");
         } else if (event.type === "error") {
           if (event.payload.code === "cooldown_active") {
             const details = event.payload.details as
@@ -1550,9 +1583,24 @@ export function ConversationPage() {
           }
           setToast(String(event.payload.message));
         } else if (event.type === "match.ended") {
+          setEndedEncounterId(String(event.payload.matchId));
           teardown();
           call.setStatus("ended");
           setToast("The encounter ended.");
+        } else if (event.type === "session.reconnect_offered") {
+          const requestId = String(event.payload.requestId);
+          if (
+            window.confirm("Your previous match offered to reconnect. Accept?")
+          )
+            void api(`/v1/reconnect-requests/${requestId}/actions`, {
+              method: "POST",
+              body: JSON.stringify({ action: "accept" }),
+            });
+          else
+            void api(`/v1/reconnect-requests/${requestId}/actions`, {
+              method: "POST",
+              body: JSON.stringify({ action: "decline" }),
+            });
         } else if (event.type === "chat.message")
           setMessages((items) => [
             ...items,
@@ -1607,10 +1655,13 @@ export function ConversationPage() {
   }, []);
 
   useEffect(() => {
-    if (!skipAllowedAt || skipAllowedAt <= Date.now()) return;
+    const nextDeadline = [skipAllowedAt, ratingEligibleAt]
+      .filter((value): value is number => Boolean(value && value > Date.now()))
+      .sort((a, b) => a - b)[0];
+    if (!nextDeadline) return;
     const timer = window.setInterval(() => setClock(Date.now()), 250);
     return () => window.clearInterval(timer);
-  }, [skipAllowedAt]);
+  }, [skipAllowedAt, ratingEligibleAt]);
 
   async function ensurePeer() {
     if (peer.current) return peer.current;
@@ -1702,6 +1753,57 @@ export function ConversationPage() {
     ? Math.max(0, Math.ceil((skipAllowedAt - clock) / 1_000))
     : 0;
   const nextLocked = mode === "text" && Boolean(matchId) && skipSeconds > 0;
+  const canRate = Boolean(
+    (matchId || endedEncounterId) &&
+    ratingEligibleAt &&
+    clock >= ratingEligibleAt &&
+    !ratingSubmitted,
+  );
+
+  const submitRating = async (outcome: "like" | "dislike") => {
+    const encounterId = matchId ?? endedEncounterId;
+    if (!encounterId) return;
+    try {
+      await api(`/v1/encounters/${encounterId}/rating`, {
+        method: "POST",
+        body: JSON.stringify({ outcome }),
+      });
+      setRatingSubmitted(outcome);
+      setToast("Rating saved. It cannot be changed.");
+    } catch (error) {
+      setToast(
+        error instanceof Error ? error.message : "Rating could not be saved",
+      );
+    }
+  };
+
+  const revealIdentity = async () => {
+    if (!matchId) return;
+    try {
+      await api(`/v1/encounters/${matchId}/reveal`, { method: "POST" });
+      setToast("Your safe call card was shared for this encounter.");
+    } catch (error) {
+      setToast(
+        error instanceof Error
+          ? error.message
+          : "Safe card could not be shared",
+      );
+    }
+  };
+
+  const reconnectPrevious = async () => {
+    if (!endedEncounterId) return;
+    try {
+      await api(`/v1/encounters/${endedEncounterId}/reconnect`, {
+        method: "POST",
+      });
+      setToast("Reconnect offer sent. It expires shortly.");
+    } catch (error) {
+      setToast(
+        error instanceof Error ? error.message : "Reconnect is unavailable",
+      );
+    }
+  };
 
   const submitReport = async (leave: boolean) => {
     if (!matchId) return;
@@ -1796,10 +1898,26 @@ export function ConversationPage() {
           </div>
         </div>
         <div className="call-identity">
-          <Avatar name="Stranger preview" />
+          <Avatar
+            name={callCard?.displayName ?? "Stranger preview"}
+            {...(callCard?.avatarUrl ? { src: callCard.avatarUrl } : {})}
+          />
           <div>
-            <span>Current encounter</span>
-            <strong>Profile visibility applies here</strong>
+            <span>
+              {callCard
+                ? `@${callCard.username} · ${callCard.country}`
+                : "Current encounter"}
+            </span>
+            <strong>
+              {callCard?.displayName ?? "Profile visibility applies here"}
+            </strong>
+            {callCard ? (
+              <small>
+                {[callCard.language, ...callCard.interests]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </small>
+            ) : null}
           </div>
         </div>
       </section>
@@ -1850,6 +1968,14 @@ export function ConversationPage() {
         >
           <span>MIC</span>
           <b>{call.audioEnabled ? "ON" : "OFF"}</b>
+        </button>
+        <button
+          disabled={!matchId}
+          onClick={() => void revealIdentity()}
+          type="button"
+        >
+          <span>SHARE</span>
+          <b>SAFE CARD</b>
         </button>
         <button
           aria-pressed={!call.videoEnabled}
@@ -1917,6 +2043,33 @@ export function ConversationPage() {
           ×
         </Link>
       </nav>
+      {canRate || ratingSubmitted || endedEncounterId ? (
+        <Card className="call-feedback" aria-live="polite">
+          <strong>
+            {ratingSubmitted
+              ? "Rating submitted"
+              : canRate
+                ? "How was this conversation?"
+                : "Ratings unlock after two connected minutes."}
+          </strong>
+          {canRate ? (
+            <div>
+              <Button onClick={() => void submitRating("like")}>Like</Button>
+              <Button
+                onClick={() => void submitRating("dislike")}
+                variant="secondary"
+              >
+                Dislike
+              </Button>
+            </div>
+          ) : null}
+          {endedEncounterId ? (
+            <Button onClick={() => void reconnectPrevious()} variant="quiet">
+              Reconnect (Loaded or Maxed Out)
+            </Button>
+          ) : null}
+        </Card>
+      ) : null}
       <Dialog
         actions={
           <>

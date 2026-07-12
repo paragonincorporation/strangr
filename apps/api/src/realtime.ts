@@ -342,6 +342,30 @@ export class RedisRealtimeStore {
     const value = await this.client.get(this.key("match", matchId));
     return value ? (JSON.parse(value) as MatchRecord) : null;
   }
+  async acquireReconnectMatch(first: string, second: string, mode: MatchMode) {
+    const id = randomUUID();
+    const expiresAt = new Date(Date.now() + 20_000).toISOString();
+    const match: MatchRecord = { id, mode, first, second, expiresAt };
+    const acquired = await this.client.eval(
+      `if redis.call('EXISTS',KEYS[1])==1 or redis.call('EXISTS',KEYS[2])==1 then return 0 end
+       redis.call('ZREM',KEYS[4],ARGV[1]); redis.call('ZREM',KEYS[4],ARGV[2])
+       redis.call('DEL',KEYS[5],KEYS[6])
+       redis.call('SET',KEYS[1],ARGV[3],'PX',20000); redis.call('SET',KEYS[2],ARGV[3],'PX',20000)
+       redis.call('SET',KEYS[3],ARGV[4],'PX',20000); return 1`,
+      {
+        keys: [
+          this.key("active", first),
+          this.key("active", second),
+          this.key("match", id),
+          this.key("queue", `adult_18_plus:${mode}`),
+          this.key("queue-entry", first),
+          this.key("queue-entry", second),
+        ],
+        arguments: [first, second, id, JSON.stringify(match)],
+      },
+    );
+    return Number(acquired) === 1 ? match : null;
+  }
   async acknowledge(matchId: string, userId: string) {
     const match = await this.getMatch(matchId);
     if (!match || (match.first !== userId && match.second !== userId))

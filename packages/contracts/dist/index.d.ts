@@ -416,6 +416,51 @@ export declare const encounterListResponseSchema: z.ZodObject<{
     }, z.core.$strip>>;
     nextCursor: z.ZodNullable<z.ZodString>;
 }, z.core.$strip>;
+export declare const conversationRatingOutcomeSchema: z.ZodEnum<{
+    like: "like";
+    dislike: "dislike";
+}>;
+export declare const conversationRatingRequestSchema: z.ZodObject<{
+    outcome: z.ZodEnum<{
+        like: "like";
+        dislike: "dislike";
+    }>;
+}, z.core.$strip>;
+export declare const conversationRatingResponseSchema: z.ZodObject<{
+    encounterId: z.ZodUUID;
+    outcome: z.ZodEnum<{
+        like: "like";
+        dislike: "dislike";
+    }>;
+    submittedAt: z.ZodISODateTime;
+    resolved: z.ZodBoolean;
+    peerOutcome: z.ZodNullable<z.ZodEnum<{
+        like: "like";
+        dislike: "dislike";
+    }>>;
+}, z.core.$strip>;
+export declare const ratingSummarySchema: z.ZodObject<{
+    totalLikes: z.ZodNumber;
+    totalRatings: z.ZodNumber;
+}, z.core.$strip>;
+export declare const safeCallCardSchema: z.ZodObject<{
+    username: z.ZodString;
+    displayName: z.ZodString;
+    avatarUrl: z.ZodNullable<z.ZodString>;
+    country: z.ZodString;
+    language: z.ZodNullable<z.ZodString>;
+    interests: z.ZodArray<z.ZodString>;
+    revealSource: z.ZodEnum<{
+        subject_consent: "subject_consent";
+        maxed_entitlement: "maxed_entitlement";
+    }>;
+}, z.core.$strip>;
+export declare const reconnectActionSchema: z.ZodObject<{
+    action: z.ZodEnum<{
+        accept: "accept";
+        decline: "decline";
+    }>;
+}, z.core.$strip>;
 export declare const matchJoinRequestSchema: z.ZodObject<{
     mode: z.ZodEnum<{
         text: "text";
@@ -594,6 +639,13 @@ export declare const clientRealtimeEnvelopeSchema: z.ZodDiscriminatedUnion<[z.Zo
 }, z.core.$strip>, z.ZodObject<{
     version: z.ZodLiteral<1>;
     type: z.ZodLiteral<"match.leave">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        matchId: z.ZodUUID;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"session.reveal_identity">;
     requestId: z.ZodString;
     payload: z.ZodObject<{
         matchId: z.ZodUUID;
@@ -803,6 +855,80 @@ export declare const serverRealtimeEnvelopeSchema: z.ZodDiscriminatedUnion<[z.Zo
     }, z.core.$strip>;
 }, z.core.$strip>, z.ZodObject<{
     version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"session.timer">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        matchId: z.ZodUUID;
+        connectedAt: z.ZodISODateTime;
+        connectedSeconds: z.ZodNumber;
+        skipAllowedAt: z.ZodNullable<z.ZodISODateTime>;
+        ratingEligibleAt: z.ZodISODateTime;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"session.rating_available">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        matchId: z.ZodUUID;
+        windowClosesAt: z.ZodNullable<z.ZodISODateTime>;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"session.identity_revealed">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        matchId: z.ZodUUID;
+        card: z.ZodObject<{
+            username: z.ZodString;
+            displayName: z.ZodString;
+            avatarUrl: z.ZodNullable<z.ZodString>;
+            country: z.ZodString;
+            language: z.ZodNullable<z.ZodString>;
+            interests: z.ZodArray<z.ZodString>;
+            revealSource: z.ZodEnum<{
+                subject_consent: "subject_consent";
+                maxed_entitlement: "maxed_entitlement";
+            }>;
+        }, z.core.$strip>;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"session.rating_submitted">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        matchId: z.ZodUUID;
+        outcome: z.ZodEnum<{
+            like: "like";
+            dislike: "dislike";
+        }>;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"session.reconnect_offered">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        requestId: z.ZodUUID;
+        mode: z.ZodEnum<{
+            text: "text";
+            video: "video";
+        }>;
+        expiresAt: z.ZodISODateTime;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"session.reconnect_resolved">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        requestId: z.ZodUUID;
+        state: z.ZodEnum<{
+            accepted: "accepted";
+            declined: "declined";
+            expired: "expired";
+            invalidated: "invalidated";
+        }>;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
     type: z.ZodEnum<{
         "rtc.offer": "rtc.offer";
         "rtc.answer": "rtc.answer";
@@ -931,7 +1057,7 @@ export declare const serverRealtimeEnvelopeSchema: z.ZodDiscriminatedUnion<[z.Zo
         sdpMLineIndex: z.ZodNullable<z.ZodNumber>;
     }, z.core.$strip>;
 }, z.core.$strip>], "type">;
-export declare const reservedRealtimeNamespaces: readonly ["connection", "presence", "match", "rtc", "chat", "friend", "call", "report", "error"];
+export declare const reservedRealtimeNamespaces: readonly ["connection", "presence", "match", "rtc", "chat", "friend", "call", "report", "error", "session"];
 export declare function parseClientRealtimeMessage(input: string): z.ZodSafeParseSuccess<{
     version: 1;
     type: "connection.ping";
@@ -964,6 +1090,13 @@ export declare function parseClientRealtimeMessage(input: string): z.ZodSafePars
 } | {
     version: 1;
     type: "match.leave";
+    requestId: string;
+    payload: {
+        matchId: string;
+    };
+} | {
+    version: 1;
+    type: "session.reveal_identity";
     requestId: string;
     payload: {
         matchId: string;
@@ -1083,6 +1216,7 @@ export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>;
 export type OnboardingRequest = z.infer<typeof onboardingRequestSchema>;
 export type MatchMode = z.infer<typeof matchModeSchema>;
 export type MatchingPreferences = z.infer<typeof matchingPreferencesSchema>;
+export type ConversationRatingOutcome = z.infer<typeof conversationRatingOutcomeSchema>;
 export type Profile = z.infer<typeof profileSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type VisibilityAudience = z.infer<typeof visibilityAudienceSchema>;

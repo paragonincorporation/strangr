@@ -950,34 +950,34 @@ For every manual step, the responsible agent must document the dashboard URL, ex
 
 Update this table after every completed task. Keep evidence concise and link repository files where useful.
 
-| Task                      | Status      | Owner/agent | Evidence                                  | Blocker or exact next action                             |
-| ------------------------- | ----------- | ----------- | ----------------------------------------- | -------------------------------------------------------- |
-| 0. Live inventory         | complete    | Codex       | July 12 inventory below                   | Re-audit affected boundaries at the start of each task   |
-| 1. Human owners           | blocked     | unassigned  | Required roles listed below               | Humans assign accountable owners                         |
-| 2. Launch and policies    | in_progress | Codex       | Run 2 country controls and policy gates   | Humans approve countries and final policy documents      |
-| 3. Environments           | in_progress | Codex       | Run 3 CI, validation, setup runbook       | Humans create/configure production provider accounts     |
-| 4. 18+ onboarding         | complete    | Codex       | Run 2 onboarding, contact guards, tests   | Exercise database integration when services are running  |
-| 5. Matching preferences   | complete    | Codex       | Run 3 persistence, API, Redis, UI, tests  | Exercise integration suite through CI or local services  |
-| 6. Text cooldown          | complete    | Codex       | Realtime lease, contracts, API, UI, tests | Exercise Redis integration when Docker is running        |
-| 7. Ratings                | not_started | unassigned  | Existing encounters                       | Design migration and contracts after Task 0              |
-| 8. Safe-card reveal       | not_started | unassigned  | Existing profile projection/privacy       | Depends on entitlement contract                          |
-| 9. Reconnect              | not_started | unassigned  | Existing encounter history                | Depends on entitlement contract                          |
-| 10. Media quality         | not_started | unassigned  | Existing WebRTC/media boundary            | Can follow Task 0 inventory                              |
-| 11. Stripe billing        | blocked     | unassigned  | Config placeholders only                  | Manual Stripe account/approval plus agent implementation |
-| 12. Entitlements          | in_progress | Codex       | Grant table and gender-filter boundary    | Expand around Stripe plan/catalog state in Tasks 11-12   |
-| 13. Premium UI            | not_started | unassigned  | Placeholder route exists                  | Depends on catalog and entitlements                      |
-| 14. Moderation operations | blocked     | unassigned  | Existing reports/admin/sanctions          | Manual taxonomy/staffing plus gap audit                  |
-| 15. Anti-bot/spam         | not_started | unassigned  | Existing basic rate limiting              | Configure Turnstile and expand limits                    |
-| 16. NSFW signals          | blocked     | unassigned  | None                                      | Manual model/privacy approval                            |
-| 17. Privacy operations    | not_started | unassigned  | Partial session/account foundations       | Inventory gaps after Task 0                              |
-| 18. Observability/cost    | not_started | unassigned  | Health endpoints exist                    | Choose providers and implement redaction/metrics         |
-| 19. Hardening             | not_started | unassigned  | Current quality foundation                | Begins after feature-complete release candidate          |
-| 20. E2E/load              | not_started | unassigned  | Basic Playwright/integration config       | Expand throughout Tasks 4-19                             |
-| 21. Deploy/rehearse       | not_started | unassigned  | Vercel/Render manifests exist             | Requires staging providers and feature completion        |
+| Task                      | Status      | Owner/agent | Evidence                                   | Blocker or exact next action                             |
+| ------------------------- | ----------- | ----------- | ------------------------------------------ | -------------------------------------------------------- |
+| 0. Live inventory         | complete    | Codex       | July 12 inventory below                    | Re-audit affected boundaries at the start of each task   |
+| 1. Human owners           | blocked     | unassigned  | Required roles listed below                | Humans assign accountable owners                         |
+| 2. Launch and policies    | in_progress | Codex       | Run 2 country controls and policy gates    | Humans approve countries and final policy documents      |
+| 3. Environments           | in_progress | Codex       | Run 3 CI, validation, setup runbook        | Humans create/configure production provider accounts     |
+| 4. 18+ onboarding         | complete    | Codex       | Run 2 onboarding, contact guards, tests    | Exercise database integration when services are running  |
+| 5. Matching preferences   | complete    | Codex       | Run 3 persistence, API, Redis, UI, tests   | Exercise integration suite through CI or local services  |
+| 6. Text cooldown          | complete    | Codex       | Realtime lease, contracts, API, UI, tests  | Exercise Redis integration when Docker is running        |
+| 7. Ratings                | in_progress | Codex       | Run 4 migration, API/realtime/UI, tests    | Human copy approval and staging integration validation   |
+| 8. Safe-card reveal       | in_progress | Codex       | Run 4 scoped projection/revocation/UI      | Human disclosure approval and staging validation         |
+| 9. Reconnect              | in_progress | Codex       | Run 4 entitlement/offer/atomic accept flow | Human lifetime/copy approval and staging validation      |
+| 10. Media quality         | not_started | unassigned  | Existing WebRTC/media boundary             | Can follow Task 0 inventory                              |
+| 11. Stripe billing        | blocked     | unassigned  | Config placeholders only                   | Manual Stripe account/approval plus agent implementation |
+| 12. Entitlements          | in_progress | Codex       | Grant table and gender-filter boundary     | Expand around Stripe plan/catalog state in Tasks 11-12   |
+| 13. Premium UI            | not_started | unassigned  | Placeholder route exists                   | Depends on catalog and entitlements                      |
+| 14. Moderation operations | blocked     | unassigned  | Existing reports/admin/sanctions           | Manual taxonomy/staffing plus gap audit                  |
+| 15. Anti-bot/spam         | not_started | unassigned  | Existing basic rate limiting               | Configure Turnstile and expand limits                    |
+| 16. NSFW signals          | blocked     | unassigned  | None                                       | Manual model/privacy approval                            |
+| 17. Privacy operations    | not_started | unassigned  | Partial session/account foundations        | Inventory gaps after Task 0                              |
+| 18. Observability/cost    | not_started | unassigned  | Health endpoints exist                     | Choose providers and implement redaction/metrics         |
+| 19. Hardening             | not_started | unassigned  | Current quality foundation                 | Begins after feature-complete release candidate          |
+| 20. E2E/load              | not_started | unassigned  | Basic Playwright/integration config        | Expand throughout Tasks 4-19                             |
+| 21. Deploy/rehearse       | not_started | unassigned  | Vercel/Render manifests exist              | Requires staging providers and feature completion        |
 
 ### Current handoff
 
-Tasks 0, 4, 5, and 6 are complete. Tasks 2 and 3 have complete agent implementations but remain `in_progress` on human approvals and provider setup. Task 1 remains blocked on named owners. The next implementation task is Task 7, conversation ratings. The entitlement grant boundary created for Task 5 is intentionally partial Task 12 work and must be extended, not replaced, during Stripe billing.
+Tasks 0, 4, 5, and 6 are complete. Tasks 2 and 3 have complete agent implementations but remain `in_progress` on human approvals and provider setup. Task 1 remains blocked on named owners. Tasks 7, 8, and 9 now have complete agent implementations and automated coverage but remain `in_progress` until Human tasks H7-H9 approve the provisional product decisions and the flows pass staging integration with PostgreSQL and Redis. The exact next agent implementation task is Task 10, media quality policies. The entitlement grant boundary created for Task 5 is intentionally partial Task 12 work and must be extended, not replaced, during Stripe billing.
 
 ## 16. Progress updates
 
@@ -1043,7 +1043,7 @@ Run 1 originally recommended Task 7 next. That handoff was superseded by the use
 
 ### Run 2: launch-country controls and adult-only beta
 
-Date: July 13, 2026  
+Date: July 13, 2026
 Status: agent implementation complete; Task 2 remains manually gated
 
 #### Task 2 implementation record
@@ -1153,7 +1153,54 @@ Task 2 becomes `complete` only after a human records all of the following:
 - [ ] A staging user in an enabled country succeeds, while a disabled country and missing `ZZ` country fail safely.
 - [ ] The approvers and evidence are recorded in the private operations register; no private legal or secret material is committed here.
 
-Next task: Task 7, conversation ratings. Keep rewards, XP, ParamPoints, and reputation out of that implementation.
+That handoff was completed by Run 4 below.
+
+### Run 4: conversation ratings, safe-card reveal, and reconnect
+
+Date: July 13, 2026
+
+Status: agent implementation complete; manual approvals and staging integration remain
+
+#### Tasks 7-9 implementation record
+
+- Added migration `0009_ratings_reveals_reconnect.sql` with authoritative encounter connected/rating timing, immutable per-rater conversation ratings, encounter/viewer/subject-scoped identity reveals, and expiring reconnect requests. Existing migrations were not rewritten.
+- Added shared HTTP and realtime contracts for ratings, safe cards, timer/rating availability, identity reveal, and reconnect offer/resolution events.
+- Added one account-service safe-card projection containing only avatar, username, display name, observed country, language, and interests. Exact birth date, email, bio, history, internal state, moderation, device, and billing data are not selected.
+- Rating eligibility starts at exactly 120 server-measured connected seconds. Each participant has one immutable row, duplicate retries return the original result, the window closes 24 hours after an eligible encounter ends, and the other outcome remains hidden before resolution.
+- Added a per-user total-like/total-rating projection and a moderator-only 24-hour anomaly projection for repeated pairs and coordinated all-like patterns. Ratings do not award XP, ParamPoints, quests, reputation, or any other reward.
+- Free/Lite/Loaded reveal requires the subject to share their own card. `call_card.paid_override` permits a viewer-scoped Maxed Out override only while the grant remains active. Access is re-authorized for the exact encounter and revoked/denied on block, account state, sanction, encounter expiry, or lost entitlement.
+- Added provisional onboarding, privacy-settings, and in-call disclosure plus realtime safe-card delivery. Human task H8 still owns final disclosure approval.
+- Reconnect requires `matching.reconnect`, uses only the immediately previous connected eligible encounter, reveals no identity or presence in the offer, expires after a provisional two minutes, and requires recipient acceptance.
+- Reconnect acceptance rechecks blocks, adult/active account state, and launch-country matching availability, then atomically reserves both users in Redis against concurrent queue/direct activity before persisting and publishing the new match. Decline returns both users to their existing idle/normal-matching path.
+- Added conversation controls for safe-card sharing, two-minute Like/Dislike, ended-screen rating, and eligible-plan reconnect. Product copy and the two-minute offer lifetime remain provisional pending H7-H9.
+
+Files changed:
+
+- `packages/database/migrations/0009_ratings_reveals_reconnect.sql`, migration journal, schema, and `engagement.ts`;
+- `packages/contracts/src/index.ts` and generated contract output;
+- `apps/api/src/account-service.ts`, `app.ts`, and `realtime.ts`;
+- `apps/web/src/pages.tsx`;
+- `tests/integration/database.test.ts`;
+- this execution plan.
+
+Verification:
+
+- `npm run typecheck`: passed across all workspaces;
+- `npm run lint`: passed across all workspaces before the final projection refactor; the full check below is the final authority;
+- `npm test`: passed (legacy 11, admin 3, API 12, web 7, config 4, contracts 11, database 4);
+- `npm run migrations:check`: passed with 9 migrations;
+- `npm run dev:services`: unavailable because the installed `docker` client does not provide Compose (`unknown shorthand flag: d`), so PostgreSQL/Redis integration scenarios could not execute locally;
+- final `npm run check`: passed after the account-service projection refactor and plan update; formatting, lint, typecheck, all unit/API/UI/legacy tests, 9-migration validation, and secret scan passed.
+
+Remaining risks and manual gates:
+
+- H7 must approve rating labels, disclosure, resolution behavior, and safety implications.
+- H8 must approve the Maxed Out disclosure and validate every safe-card revocation case in staging.
+- H9 must approve the provisional two-minute reconnect lifetime and consent/notification copy.
+- The new migration and multi-user flows require CI or staging verification with healthy PostgreSQL and Redis before Tasks 7-9 can move from `in_progress` to `complete`.
+- Stripe-backed plan state does not exist yet. Staging validation must use audited, expiring grants; Task 11/12 must later issue and invalidate the same stable entitlement keys.
+
+Exact next agent task: Task 10, media quality policies. Do not begin billing UI or market premium quality as guaranteed before the server media policy and browser fallbacks exist.
 
 ## 17. Human tasks
 
@@ -1302,7 +1349,8 @@ Status: `not_started`
 4. Confirm the 24-hour rating window.
 5. Confirm V1 ratings award no XP, ParamPoints, quest progress, or reputation changes.
 6. Review anti-brigading and appeal implications with the safety owner.
-7. Give the implementing agent the approved copy and decisions before UI finalization.
+7. Review the provisional in-call and ended-screen copy implemented in Run 4, supply approved replacement copy, and have product and safety sign off before public beta.
+8. In staging, test just before and at 120 connected seconds, duplicate submission, attempted outcome change, both-participant resolution, a block/report after rating, and the 24-hour expiry.
 
 Completion evidence: unassigned
 
@@ -1317,6 +1365,9 @@ Status: `not_started`
 4. Review the rule with privacy/legal and product owners.
 5. Confirm Block, deletion, sanction, encounter expiry, and lost entitlement revoke access.
 6. Supply approved copy and a safe evidence reference to the implementing agent.
+7. Review the provisional onboarding, privacy-settings, and call-room disclosure implemented in Run 4 and supply exact approved replacement text.
+8. In staging, test subject consent for a free account, the scoped `call_card.paid_override` grant, grant expiry/revocation, encounter substitution, block, sanction, deletion-pending, and encounter expiry.
+9. Inspect the actual response and confirm that exact birth date, email, bio, history, device, moderation, billing, and internal fields are absent.
 
 Completion evidence: unassigned
 
@@ -1330,6 +1381,9 @@ Status: `not_started`
 3. Confirm reconnect cannot expose a profile or online status before authorization.
 4. Confirm blocks, sanctions, deletion, country changes, and lost entitlement invalidate the offer.
 5. Test the final flow with two staging accounts after implementation.
+6. Explicitly approve or replace the provisional two-minute offer lifetime implemented in Run 4.
+7. In staging, verify Free/Lite denial, Loaded/Maxed Out access through an audited expiring grant, decline, expiry, simultaneous queue join, block, sanction, deletion-pending, and country disablement.
+8. Confirm the offer notification exposes neither profile identity nor durable presence, and record product/safety approval in the private register.
 
 Completion evidence: unassigned
 

@@ -333,6 +333,21 @@ export const encounterStateEnum = pgEnum("encounter_state", [
   "active",
   "ended",
 ]);
+export const conversationRatingOutcomeEnum = pgEnum(
+  "conversation_rating_outcome",
+  ["like", "dislike"],
+);
+export const identityRevealSourceEnum = pgEnum("identity_reveal_source", [
+  "subject_consent",
+  "maxed_entitlement",
+]);
+export const reconnectRequestStateEnum = pgEnum("reconnect_request_state", [
+  "pending",
+  "accepted",
+  "declined",
+  "expired",
+  "invalidated",
+]);
 export const threadTypeEnum = pgEnum("thread_type", ["random", "direct"]);
 export const messageTypeEnum = pgEnum("message_type", ["random", "direct"]);
 export const callTypeEnum = pgEnum("call_type", ["random", "direct"]);
@@ -348,6 +363,14 @@ export const encounters = pgTable(
       .notNull()
       .defaultNow(),
     endedAt: timestamp("ended_at", { withTimezone: true }),
+    connectedAt: timestamp("connected_at", { withTimezone: true }),
+    connectedDurationSeconds: integer("connected_duration_seconds")
+      .notNull()
+      .default(0),
+    ratingEligibleAt: timestamp("rating_eligible_at", { withTimezone: true }),
+    ratingWindowClosesAt: timestamp("rating_window_closes_at", {
+      withTimezone: true,
+    }),
     completionReason: text("completion_reason"),
     diagnosticsCategory: text("diagnostics_category"),
     visibleUntil: timestamp("visible_until", { withTimezone: true }).notNull(),
@@ -355,6 +378,111 @@ export const encounters = pgTable(
   },
   (table) => [
     index("encounters_retention_idx").on(table.visibleUntil, table.id),
+  ],
+);
+
+export const conversationRatings = pgTable(
+  "conversation_ratings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    encounterId: uuid("encounter_id")
+      .notNull()
+      .references(() => encounters.id, { onDelete: "cascade" }),
+    raterId: uuid("rater_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    outcome: conversationRatingOutcomeEnum("outcome").notNull(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("conversation_ratings_encounter_rater_unique").on(
+      table.encounterId,
+      table.raterId,
+    ),
+    index("conversation_ratings_subject_outcome_idx").on(
+      table.subjectId,
+      table.outcome,
+    ),
+    check(
+      "conversation_ratings_not_self",
+      sql`${table.raterId} <> ${table.subjectId}`,
+    ),
+  ],
+);
+
+export const encounterIdentityReveals = pgTable(
+  "encounter_identity_reveals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    encounterId: uuid("encounter_id")
+      .notNull()
+      .references(() => encounters.id, { onDelete: "cascade" }),
+    viewerId: uuid("viewer_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    source: identityRevealSourceEnum("source").notNull(),
+    revealedAt: timestamp("revealed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("encounter_identity_reveals_pair_unique").on(
+      table.encounterId,
+      table.viewerId,
+      table.subjectId,
+    ),
+    index("encounter_identity_reveals_access_idx").on(
+      table.viewerId,
+      table.encounterId,
+      table.revokedAt,
+    ),
+    check(
+      "encounter_identity_reveals_not_self",
+      sql`${table.viewerId} <> ${table.subjectId}`,
+    ),
+  ],
+);
+
+export const reconnectRequests = pgTable(
+  "reconnect_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requesterId: uuid("requester_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    recipientId: uuid("recipient_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    previousEncounterId: uuid("previous_encounter_id")
+      .notNull()
+      .references(() => encounters.id, { onDelete: "cascade" }),
+    state: reconnectRequestStateEnum("state").notNull().default("pending"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("reconnect_requests_pending_requester_uidx")
+      .on(table.requesterId)
+      .where(sql`${table.state} = 'pending'`),
+    index("reconnect_requests_recipient_idx").on(
+      table.recipientId,
+      table.state,
+      table.expiresAt,
+    ),
+    check(
+      "reconnect_requests_not_self",
+      sql`${table.requesterId} <> ${table.recipientId}`,
+    ),
   ],
 );
 

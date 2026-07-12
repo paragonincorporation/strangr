@@ -9,6 +9,10 @@ node_modules/
 
 # Build output
 dist/
+!packages/database/dist/
+packages/database/dist/*
+!packages/database/dist/engagement.js
+!packages/database/dist/engagement.d.ts
 .vite/
 *.tsbuildinfo
 

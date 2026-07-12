@@ -35,6 +35,8 @@ import {
   countryCodeSchema,
   launchCountryUpdateSchema,
   matchingPreferencesSchema,
+  conversationRatingRequestSchema,
+  reconnectActionSchema,
 } from "@paramingle/contracts";
 import {
   BlockRepository,
@@ -46,6 +48,7 @@ import {
   createDatabase,
   LaunchRepository,
   MatchingPreferenceRepository,
+  EngagementRepository,
 } from "@paramingle/database";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -92,6 +95,7 @@ export interface CreateAppOptions {
   moderation?: ModerationRepository;
   launch?: LaunchRepository;
   matchingPreferences?: MatchingPreferenceRepository;
+  engagement?: EngagementRepository;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -115,7 +119,8 @@ export function createApp(options: CreateAppOptions = {}) {
     options.communications &&
     options.moderation &&
     options.launch &&
-    options.matchingPreferences
+    options.matchingPreferences &&
+    options.engagement
       ? null
       : createDatabase(config.DATABASE_URL);
   const encryptor = createAesGcmFieldEncryptor(
@@ -153,6 +158,8 @@ export function createApp(options: CreateAppOptions = {}) {
   const matchingPreferences =
     options.matchingPreferences ??
     new MatchingPreferenceRepository(connection!.db);
+  const engagement =
+    options.engagement ?? new EngagementRepository(connection!.db);
   const countryFromRequest = (request: FastifyRequest) => {
     const value = request.headers[config.COUNTRY_HEADER_NAME];
     const candidate = Array.isArray(value) ? value[0] : value;
@@ -606,6 +613,176 @@ export function createApp(options: CreateAppOptions = {}) {
     },
   );
   app.post(
+    "/v1/encounters/:id/rating",
+    { preHandler: guard("contact") },
+    route(conversationRatingRequestSchema, async (req, input) => {
+      try {
+        const result = await engagement.rating(
+          (req.params as { id: string }).id,
+          req.auth!.user.id,
+          input.outcome,
+        );
+        await realtime.publishUser(
+          req.auth!.user.id,
+          JSON.stringify(
+            serverRealtimeEnvelopeSchema.parse({
+              version: PROTOCOL_VERSION,
+              type: "session.rating_submitted",
+              requestId: req.id,
+              payload: { matchId: result.encounterId, outcome: result.outcome },
+            }),
+          ),
+        );
+        return { ...result, submittedAt: result.submittedAt.toISOString() };
+      } catch (cause) {
+        throw engagementError(cause);
+      }
+    }),
+  );
+  app.get("/v1/me/rating-summary", { preHandler: guard("contact") }, (req) =>
+    engagement.ratingSummary(req.auth!.user.id),
+  );
+  app.get(
+    "/v1/admin/quality/summary",
+    { preHandler: adminGuard("moderator") },
+    async () => ({
+      ratings: await engagement.ratingAnomalySummary(),
+    }),
+  );
+  app.post(
+    "/v1/encounters/:id/reveal",
+    { preHandler: guard("contact") },
+    async (req, reply) => {
+      try {
+        const encounterId = (req.params as { id: string }).id;
+        const reveal = await engagement.revealOwnCard(
+          encounterId,
+          req.auth!.user.id,
+        );
+        const access = await engagement.authorizeCallCard(
+          encounterId,
+          reveal.viewerId,
+        );
+        const card = await accounts.safeCallCard(
+          access.subjectId,
+          access.revealSource,
+        );
+        await realtime.publishUser(
+          reveal.viewerId,
+          JSON.stringify(
+            serverRealtimeEnvelopeSchema.parse({
+              version: PROTOCOL_VERSION,
+              type: "session.identity_revealed",
+              requestId: randomUUID(),
+              payload: { matchId: encounterId, card },
+            }),
+          ),
+        );
+        return { revealedAt: reveal.revealedAt.toISOString() };
+      } catch (cause) {
+        return domainReply(reply, req.id, engagementError(cause));
+      }
+    },
+  );
+  app.get(
+    "/v1/encounters/:id/call-card",
+    { preHandler: guard("contact") },
+    async (req, reply) => {
+      try {
+        const access = await engagement.authorizeCallCard(
+          (req.params as { id: string }).id,
+          req.auth!.user.id,
+        );
+        return await accounts.safeCallCard(
+          access.subjectId,
+          access.revealSource,
+        );
+      } catch (cause) {
+        return domainReply(reply, req.id, engagementError(cause));
+      }
+    },
+  );
+  app.post(
+    "/v1/encounters/:id/reconnect",
+    { preHandler: [guard("contact", "matching"), launchGuard("matching")] },
+    async (req, reply) => {
+      try {
+        const offer = await engagement.createReconnect(
+          req.auth!.user.id,
+          (req.params as { id: string }).id,
+        );
+        await realtime.publishUser(
+          offer.recipientId,
+          JSON.stringify(
+            serverRealtimeEnvelopeSchema.parse({
+              version: PROTOCOL_VERSION,
+              type: "session.reconnect_offered",
+              requestId: randomUUID(),
+              payload: {
+                requestId: offer.id,
+                mode: offer.mode,
+                expiresAt: offer.expiresAt.toISOString(),
+              },
+            }),
+          ),
+        );
+        return {
+          id: offer.id,
+          mode: offer.mode,
+          expiresAt: offer.expiresAt.toISOString(),
+        };
+      } catch (cause) {
+        return domainReply(reply, req.id, engagementError(cause));
+      }
+    },
+  );
+  app.post(
+    "/v1/reconnect-requests/:id/actions",
+    { preHandler: [guard("contact", "matching"), launchGuard("matching")] },
+    route(reconnectActionSchema, async (req, input) => {
+      try {
+        const resolved = await engagement.resolveReconnect(
+          (req.params as { id: string }).id,
+          req.auth!.user.id,
+          input.action,
+        );
+        if (resolved.state === "accepted") {
+          const match = await realtime.acquireReconnectMatch(
+            resolved.requesterId,
+            resolved.recipientId,
+            resolved.mode,
+          );
+          if (!match)
+            throw new DomainError(
+              "conflict",
+              "One participant is already matching",
+              409,
+            );
+          await encounters.start(match.id, match.mode, [
+            match.first,
+            match.second,
+          ]);
+          await publishMatch(realtime, match);
+        }
+        for (const userId of [resolved.requesterId, resolved.recipientId])
+          await realtime.publishUser(
+            userId,
+            JSON.stringify(
+              serverRealtimeEnvelopeSchema.parse({
+                version: PROTOCOL_VERSION,
+                type: "session.reconnect_resolved",
+                requestId: randomUUID(),
+                payload: { requestId: resolved.id, state: resolved.state },
+              }),
+            ),
+          );
+        return { id: resolved.id, state: resolved.state };
+      } catch (cause) {
+        throw engagementError(cause);
+      }
+    }),
+  );
+  app.post(
     "/v1/blocks",
     { preHandler: guard("contact") },
     route(blockCreateRequestSchema, async (req, input) => {
@@ -616,6 +793,7 @@ export function createApp(options: CreateAppOptions = {}) {
         input.userId,
         input.reasonCategory,
       );
+      await engagement.revokePair(req.auth!.user.id, input.userId);
       const activeMatch = await realtime.activeMatchBetween(
         req.auth!.user.id,
         input.userId,
@@ -623,6 +801,7 @@ export function createApp(options: CreateAppOptions = {}) {
       await realtime.blockPair(req.auth!.user.id, input.userId);
       if (activeMatch) {
         await encounters.end(activeMatch.id, "blocked", req.auth!.user.id);
+        await engagement.finalizeTiming(activeMatch.id);
         const requestId = randomUUID();
         for (const userId of [req.auth!.user.id, input.userId])
           await realtime.publishUser(
@@ -1292,6 +1471,8 @@ export function createApp(options: CreateAppOptions = {}) {
           moderation,
           launch,
           matchingPreferences,
+          engagement,
+          accounts,
         )
           .then(async (messages) => {
             for (const item of messages)
@@ -1419,6 +1600,8 @@ async function handleRealtime(
   moderation: ModerationRepository,
   launch: LaunchRepository,
   matchingPreferences: MatchingPreferenceRepository,
+  engagement: EngagementRepository,
+  accounts: AccountService,
 ): Promise<Outbound[]> {
   if (event.type === "connection.ping") return [];
   if (event.type === "match.join") {
@@ -1516,22 +1699,66 @@ async function handleRealtime(
     throw new Error("relationship_unavailable");
   if (event.type === "match.ack") {
     const connectedAt = await realtime.acknowledge(match.id, identity.userId);
-    if (connectedAt) await encounters.connected(match.id);
+    if (connectedAt) {
+      await encounters.connected(match.id);
+      await engagement.markConnected(match.id, new Date(connectedAt));
+    }
     const skipAllowedAt =
       connectedAt && match.mode === "text"
         ? new Date(new Date(connectedAt).getTime() + 25_000).toISOString()
         : null;
     return connectedAt
-      ? [match.first, match.second].map((userId) => ({
-          userId,
-          event: {
-            version: PROTOCOL_VERSION,
-            type: "match.connected" as const,
-            requestId: event.requestId,
-            payload: { matchId: match.id, connectedAt, skipAllowedAt },
+      ? [match.first, match.second].flatMap((userId) => [
+          {
+            userId,
+            event: {
+              version: PROTOCOL_VERSION,
+              type: "match.connected" as const,
+              requestId: event.requestId,
+              payload: { matchId: match.id, connectedAt, skipAllowedAt },
+            },
           },
-        }))
+          {
+            userId,
+            event: {
+              version: PROTOCOL_VERSION,
+              type: "session.timer" as const,
+              requestId: event.requestId,
+              payload: {
+                matchId: match.id,
+                connectedAt,
+                connectedSeconds: 0,
+                skipAllowedAt,
+                ratingEligibleAt: new Date(
+                  new Date(connectedAt).getTime() + 120_000,
+                ).toISOString(),
+              },
+            },
+          },
+        ])
       : [];
+  }
+  if (event.type === "session.reveal_identity") {
+    const reveal = await engagement.revealOwnCard(match.id, identity.userId);
+    const access = await engagement.authorizeCallCard(
+      match.id,
+      reveal.viewerId,
+    );
+    const card = await accounts.safeCallCard(
+      access.subjectId,
+      access.revealSource,
+    );
+    return [
+      {
+        userId: reveal.viewerId,
+        event: {
+          version: PROTOCOL_VERSION,
+          type: "session.identity_revealed",
+          requestId: event.requestId,
+          payload: { matchId: match.id, card },
+        },
+      },
+    ];
   }
   if (event.type === "match.leave" || event.type === "match.next") {
     if (event.type === "match.next" && match.mode === "text") {
@@ -1564,6 +1791,7 @@ async function handleRealtime(
       event.type === "match.next" ? "next" : "left",
       identity.userId,
     );
+    const rating = await engagement.finalizeTiming(match.id);
     const ended: Outbound[] = [match.first, match.second].map((userId) => ({
       userId,
       event: {
@@ -1581,6 +1809,21 @@ async function handleRealtime(
         },
       },
     }));
+    if (rating.eligible && rating.windowClosesAt)
+      ended.push(
+        ...[match.first, match.second].map((userId) => ({
+          userId,
+          event: {
+            version: PROTOCOL_VERSION,
+            type: "session.rating_available" as const,
+            requestId: event.requestId,
+            payload: {
+              matchId: match.id,
+              windowClosesAt: rating.windowClosesAt!.toISOString(),
+            },
+          },
+        })),
+      );
     if (event.type === "match.next") {
       const criteria = await matchingPreferences.criteria(identity.userId);
       const result = await realtime.joinQueue(identity, match.mode, criteria);
@@ -1664,6 +1907,44 @@ function domainReply(reply: FastifyReply, requestId: string, cause: unknown) {
   return reply
     .code(500)
     .send(error("internal_error", "Request failed", requestId));
+}
+
+function engagementError(cause: unknown) {
+  if (cause instanceof DomainError) return cause;
+  const code = cause instanceof Error ? cause.message : "internal_error";
+  if (code === "entitlement_required")
+    return new DomainError(
+      "forbidden",
+      "This feature requires an eligible plan",
+      403,
+    );
+  if (
+    [
+      "encounter_unavailable",
+      "call_card_unavailable",
+      "reconnect_unavailable",
+    ].includes(code)
+  )
+    return new DomainError(
+      "not_found",
+      "This encounter feature is unavailable",
+      404,
+    );
+  if (code === "rating_not_eligible")
+    return new DomainError(
+      "conflict",
+      "Ratings become available after two connected minutes",
+      409,
+    );
+  if (code === "rating_window_closed")
+    return new DomainError("conflict", "The rating window has closed", 409);
+  if (code === "rating_immutable")
+    return new DomainError(
+      "conflict",
+      "A submitted rating cannot be changed",
+      409,
+    );
+  return cause;
 }
 function socialError(cause: unknown) {
   const code = cause instanceof Error ? cause.message : "request_unavailable";

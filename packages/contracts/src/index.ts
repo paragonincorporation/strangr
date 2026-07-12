@@ -335,6 +335,33 @@ export const encounterListResponseSchema = z.object({
   items: z.array(encounterSchema),
   nextCursor: cursorSchema.nullable(),
 });
+export const conversationRatingOutcomeSchema = z.enum(["like", "dislike"]);
+export const conversationRatingRequestSchema = z.object({
+  outcome: conversationRatingOutcomeSchema,
+});
+export const conversationRatingResponseSchema = z.object({
+  encounterId: internalIdSchema,
+  outcome: conversationRatingOutcomeSchema,
+  submittedAt: timestampSchema,
+  resolved: z.boolean(),
+  peerOutcome: conversationRatingOutcomeSchema.nullable(),
+});
+export const ratingSummarySchema = z.object({
+  totalLikes: z.number().int().nonnegative(),
+  totalRatings: z.number().int().nonnegative(),
+});
+export const safeCallCardSchema = z.object({
+  username: usernameSchema,
+  displayName: z.string().trim().min(1).max(80),
+  avatarUrl: z.string().nullable(),
+  country: countryCodeSchema,
+  language: z.string().trim().min(2).max(35).nullable(),
+  interests: z.array(z.string().trim().min(1).max(40)).max(12),
+  revealSource: z.enum(["subject_consent", "maxed_entitlement"]),
+});
+export const reconnectActionSchema = z.object({
+  action: z.enum(["accept", "decline"]),
+});
 export const matchJoinRequestSchema = z.object({
   mode: matchModeSchema,
   allowPreferenceRelaxation: z.boolean().default(false),
@@ -468,6 +495,12 @@ export const clientRealtimeEnvelopeSchema = z.discriminatedUnion("type", [
   z.object({
     version: z.literal(PROTOCOL_VERSION),
     type: z.literal("match.leave"),
+    requestId: requestIdSchema,
+    payload: matchIdPayloadSchema,
+  }),
+  z.object({
+    version: z.literal(PROTOCOL_VERSION),
+    type: z.literal("session.reveal_identity"),
     requestId: requestIdSchema,
     payload: matchIdPayloadSchema,
   }),
@@ -613,6 +646,58 @@ export const serverRealtimeEnvelopeSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     version: z.literal(PROTOCOL_VERSION),
+    type: z.literal("session.timer"),
+    requestId: requestIdSchema,
+    payload: matchIdPayloadSchema.extend({
+      connectedAt: timestampSchema,
+      connectedSeconds: z.number().int().nonnegative(),
+      skipAllowedAt: timestampSchema.nullable(),
+      ratingEligibleAt: timestampSchema,
+    }),
+  }),
+  z.object({
+    version: z.literal(PROTOCOL_VERSION),
+    type: z.literal("session.rating_available"),
+    requestId: requestIdSchema,
+    payload: matchIdPayloadSchema.extend({
+      windowClosesAt: timestampSchema.nullable(),
+    }),
+  }),
+  z.object({
+    version: z.literal(PROTOCOL_VERSION),
+    type: z.literal("session.identity_revealed"),
+    requestId: requestIdSchema,
+    payload: matchIdPayloadSchema.extend({ card: safeCallCardSchema }),
+  }),
+  z.object({
+    version: z.literal(PROTOCOL_VERSION),
+    type: z.literal("session.rating_submitted"),
+    requestId: requestIdSchema,
+    payload: matchIdPayloadSchema.extend({
+      outcome: conversationRatingOutcomeSchema,
+    }),
+  }),
+  z.object({
+    version: z.literal(PROTOCOL_VERSION),
+    type: z.literal("session.reconnect_offered"),
+    requestId: requestIdSchema,
+    payload: z.object({
+      requestId: internalIdSchema,
+      mode: matchModeSchema,
+      expiresAt: timestampSchema,
+    }),
+  }),
+  z.object({
+    version: z.literal(PROTOCOL_VERSION),
+    type: z.literal("session.reconnect_resolved"),
+    requestId: requestIdSchema,
+    payload: z.object({
+      requestId: internalIdSchema,
+      state: z.enum(["accepted", "declined", "expired", "invalidated"]),
+    }),
+  }),
+  z.object({
+    version: z.literal(PROTOCOL_VERSION),
     type: z.enum(["rtc.offer", "rtc.answer"]),
     requestId: requestIdSchema,
     payload: rtcDescriptionPayloadSchema,
@@ -746,6 +831,7 @@ export const reservedRealtimeNamespaces = [
   "call",
   "report",
   "error",
+  "session",
 ] as const;
 
 function utf8ByteLength(input: string): number {
@@ -792,6 +878,9 @@ export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>;
 export type OnboardingRequest = z.infer<typeof onboardingRequestSchema>;
 export type MatchMode = z.infer<typeof matchModeSchema>;
 export type MatchingPreferences = z.infer<typeof matchingPreferencesSchema>;
+export type ConversationRatingOutcome = z.infer<
+  typeof conversationRatingOutcomeSchema
+>;
 export type Profile = z.infer<typeof profileSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type VisibilityAudience = z.infer<typeof visibilityAudienceSchema>;

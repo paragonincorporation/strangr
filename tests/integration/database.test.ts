@@ -14,6 +14,10 @@ import {
   LaunchRepository,
   MatchingPreferenceRepository,
   entitlementGrants,
+  EngagementRepository,
+  launchCountries,
+  userCountryState,
+  conversationRatings,
 } from "@paramingle/database";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, test } from "vitest";
@@ -33,6 +37,7 @@ const blocks = new BlockRepository(db);
 const friends = new FriendRepository(db);
 const launch = new LaunchRepository(db);
 const matching = new MatchingPreferenceRepository(db);
+const engagement = new EngagementRepository(db);
 
 beforeEach(async () => {
   await db.execute(sql`truncate table encounters, users cascade`);
@@ -135,6 +140,137 @@ describe("encounter retention and blocks", () => {
       blocks.create(second, first, "safety"),
     ]);
     expect(await blocks.hasEitherDirection(first, second)).toBe(true);
+  });
+});
+
+describe("ratings, safe cards, and reconnect", () => {
+  async function eligiblePair() {
+    const first = await identities.create({
+      authSubject: randomUUID(),
+      birthDate: "2000-01-01",
+      cohort: "adult_18_plus",
+    });
+    const second = await identities.create({
+      authSubject: randomUUID(),
+      birthDate: "2000-01-02",
+      cohort: "adult_18_plus",
+    });
+    await db
+      .update(users)
+      .set({ accountState: "active", emailVerified: true })
+      .where(sql`${users.id} in (${first.id},${second.id})`);
+    await profileRepository.create(
+      first.id,
+      `rate_${first.id.slice(0, 6)}`,
+      "First",
+    );
+    await profileRepository.create(
+      second.id,
+      `rate_${second.id.slice(0, 6)}`,
+      "Second",
+    );
+    await db
+      .insert(launchCountries)
+      .values({ countryCode: "BD", matchingEnabled: true })
+      .onConflictDoUpdate({
+        target: launchCountries.countryCode,
+        set: { matchingEnabled: true },
+      });
+    await db.insert(userCountryState).values([
+      {
+        userId: first.id,
+        registrationCountry: "BD",
+        lastObservedCountry: "BD",
+        countrySource: "test",
+      },
+      {
+        userId: second.id,
+        registrationCountry: "BD",
+        lastObservedCountry: "BD",
+        countrySource: "test",
+      },
+    ]);
+    return [first.id, second.id] as const;
+  }
+
+  test("enforces duration, immutable retries, privacy, and aggregate likes", async () => {
+    const [first, second] = await eligiblePair();
+    const id = randomUUID();
+    const connected = new Date("2026-07-13T00:00:00Z");
+    await encounters.start(id, "text", [first, second], connected);
+    await engagement.markConnected(id, connected);
+    await expect(
+      engagement.rating(
+        id,
+        first,
+        "like",
+        new Date(connected.getTime() + 119_999),
+      ),
+    ).rejects.toThrow("rating_not_eligible");
+    const atBoundary = new Date(connected.getTime() + 120_000);
+    const [one, retry] = await Promise.all([
+      engagement.rating(id, first, "like", atBoundary),
+      engagement.rating(id, first, "like", atBoundary),
+    ]);
+    expect(one.peerOutcome).toBeNull();
+    expect(retry.outcome).toBe("like");
+    await expect(
+      engagement.rating(id, first, "dislike", atBoundary),
+    ).rejects.toThrow("rating_immutable");
+    expect(await db.select().from(conversationRatings)).toHaveLength(1);
+    expect(await engagement.ratingSummary(second)).toEqual({
+      totalLikes: 1,
+      totalRatings: 1,
+    });
+  });
+
+  test("reveals only an encounter safe card and revokes it on block", async () => {
+    const [first, second] = await eligiblePair();
+    const id = randomUUID();
+    await encounters.start(id, "video", [first, second]);
+    await engagement.revealOwnCard(id, second);
+    const access = await engagement.authorizeCallCard(id, first);
+    expect(access).toEqual({
+      subjectId: second,
+      revealSource: "subject_consent",
+    });
+    await blocks.create(first, second, "safety");
+    await engagement.revokePair(first, second);
+    await expect(engagement.authorizeCallCard(id, first)).rejects.toThrow(
+      "encounter_unavailable",
+    );
+  });
+
+  test("limits reconnect to entitled users and requires recipient acceptance", async () => {
+    const [first, second] = await eligiblePair();
+    const id = randomUUID();
+    const connected = new Date("2026-07-13T00:00:00Z");
+    await encounters.start(id, "text", [first, second], connected);
+    await engagement.markConnected(id, connected);
+    await encounters.end(
+      id,
+      "left",
+      first,
+      undefined,
+      new Date(connected.getTime() + 130_000),
+    );
+    await engagement.finalizeTiming(
+      id,
+      new Date(connected.getTime() + 130_000),
+    );
+    await expect(engagement.createReconnect(first, id)).rejects.toThrow(
+      "entitlement_required",
+    );
+    await db.insert(entitlementGrants).values({
+      userId: first,
+      entitlementKey: "matching.reconnect",
+      source: "test",
+      sourceReference: randomUUID(),
+    });
+    const offer = await engagement.createReconnect(first, id);
+    expect(
+      (await engagement.resolveReconnect(offer.id, second, "accept")).state,
+    ).toBe("accepted");
   });
 });
 
