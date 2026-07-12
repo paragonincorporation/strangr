@@ -3,6 +3,7 @@ import {
   CommunicationRepository,
   EncounterRepository,
   FriendRepository,
+  ModerationRepository,
   createDatabase,
 } from "@paramingle/database";
 import { AvatarService, SupabaseStorage } from "./avatar-service.js";
@@ -20,6 +21,7 @@ const avatars = new AvatarService(
 const encounters = new EncounterRepository(db);
 const friends = new FriendRepository(db);
 const communications = new CommunicationRepository(db);
+const moderation = new ModerationRepository(db);
 const dryRun = process.argv.includes("--dry-run");
 const intervalMs = Number(process.env.WORKER_HEARTBEAT_MS || 30_000);
 const once = process.argv.includes("--once");
@@ -57,6 +59,7 @@ const run = async (): Promise<boolean> => {
       new Date(),
       dryRun,
     );
+    const expiredSanctions = dryRun ? [] : await moderation.expire();
     console.info(
       JSON.stringify({
         service: "paramingle-worker",
@@ -66,6 +69,7 @@ const run = async (): Promise<boolean> => {
         friendRequestRetention,
         missedDirectCalls,
         callRetention,
+        expiredSanctions: expiredSanctions.length,
         timestamp: new Date().toISOString(),
       }),
     );

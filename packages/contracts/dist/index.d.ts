@@ -262,6 +262,95 @@ export declare const directCallActionSchema: z.ZodObject<{
         end: "end";
     }>;
 }, z.core.$strip>;
+export declare const reportReasonSchema: z.ZodEnum<{
+    harassment: "harassment";
+    other: "other";
+    sexual_content: "sexual_content";
+    hate_or_threats: "hate_or_threats";
+    minor_safety: "minor_safety";
+    spam_or_scam: "spam_or_scam";
+    self_harm: "self_harm";
+}>;
+export declare const reportCreateSchema: z.ZodObject<{
+    clientRequestId: z.ZodString;
+    reason: z.ZodEnum<{
+        harassment: "harassment";
+        other: "other";
+        sexual_content: "sexual_content";
+        hate_or_threats: "hate_or_threats";
+        minor_safety: "minor_safety";
+        spam_or_scam: "spam_or_scam";
+        self_harm: "self_harm";
+    }>;
+    note: z.ZodOptional<z.ZodString>;
+    encounterId: z.ZodOptional<z.ZodUUID>;
+    callId: z.ZodOptional<z.ZodUUID>;
+    messageId: z.ZodOptional<z.ZodUUID>;
+    leaveAfterSubmit: z.ZodDefault<z.ZodBoolean>;
+}, z.core.$strip>;
+export declare const adminRoleSchema: z.ZodEnum<{
+    support: "support";
+    moderator: "moderator";
+    admin: "admin";
+    superadmin: "superadmin";
+}>;
+export declare const caseFilterSchema: z.ZodObject<{
+    state: z.ZodOptional<z.ZodEnum<{
+        open: "open";
+        reviewing: "reviewing";
+        resolved: "resolved";
+    }>>;
+    priority: z.ZodOptional<z.ZodEnum<{
+        standard: "standard";
+        high: "high";
+        urgent: "urgent";
+    }>>;
+}, z.core.$strip>;
+export declare const caseAssignSchema: z.ZodObject<{
+    assigneeId: z.ZodUUID;
+    purpose: z.ZodString;
+}, z.core.$strip>;
+export declare const sanctionTypeSchema: z.ZodEnum<{
+    warning: "warning";
+    matching_restriction: "matching_restriction";
+    contact_restriction: "contact_restriction";
+    temporary_suspension: "temporary_suspension";
+    full_ban: "full_ban";
+    profile_removal: "profile_removal";
+    verification_challenge: "verification_challenge";
+}>;
+export declare const sanctionCreateSchema: z.ZodObject<{
+    type: z.ZodEnum<{
+        warning: "warning";
+        matching_restriction: "matching_restriction";
+        contact_restriction: "contact_restriction";
+        temporary_suspension: "temporary_suspension";
+        full_ban: "full_ban";
+        profile_removal: "profile_removal";
+        verification_challenge: "verification_challenge";
+    }>;
+    permanent: z.ZodDefault<z.ZodBoolean>;
+    endsAt: z.ZodOptional<z.ZodISODateTime>;
+    reason: z.ZodString;
+    evidenceReferences: z.ZodDefault<z.ZodArray<z.ZodUUID>>;
+    purpose: z.ZodString;
+}, z.core.$strip>;
+export declare const sanctionReverseSchema: z.ZodObject<{
+    reason: z.ZodString;
+    purpose: z.ZodString;
+}, z.core.$strip>;
+export declare const appealCreateSchema: z.ZodObject<{
+    sanctionId: z.ZodUUID;
+    statement: z.ZodString;
+}, z.core.$strip>;
+export declare const appealReviewSchema: z.ZodObject<{
+    decision: z.ZodEnum<{
+        upheld: "upheld";
+        granted: "granted";
+    }>;
+    reason: z.ZodString;
+    purpose: z.ZodString;
+}, z.core.$strip>;
 export declare const encounterSchema: z.ZodObject<{
     id: z.ZodUUID;
     mode: z.ZodEnum<{

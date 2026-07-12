@@ -1,7 +1,12 @@
 import { Badge, Button, Card, Input, Select, Skeleton } from "@paramingle/ui";
-import { Link, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { adminApi, adminSession } from "./api.js";
 
 export function AdminLogin() {
+  const [token, setToken] = useState("");
+  const navigate = useNavigate();
   return (
     <main className="admin-login">
       <Card className="admin-login__card">
@@ -9,28 +14,48 @@ export function AdminLogin() {
         <p className="admin-kicker">PARAMINGLE SAFETY OPERATIONS</p>
         <h1>Admin access.</h1>
         <p>
-          Authentication and mandatory MFA arrive in Unit 19. This separate
-          shell does not accept credentials yet.
+          Sign in through the dedicated Supabase admin project, complete MFA,
+          then provide its short-lived AAL2 access token. User-app sessions are
+          rejected.
         </p>
-        <form onSubmit={(event) => event.preventDefault()}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            adminSession.set(token);
+            void navigate("/admin");
+          }}
+        >
           <Input
-            disabled
-            label="Work email"
-            placeholder="operator@paramingle"
-            type="email"
+            label="AAL2 access token"
+            onChange={(event) => setToken(event.target.value)}
+            type="password"
+            value={token}
           />
-          <Input disabled label="Password" type="password" />
-          <Button disabled fullWidth type="submit">
-            Continue to MFA
+          <Button disabled={token.length < 20} fullWidth type="submit">
+            Open restricted workspace
           </Button>
         </form>
-        <Link to="/admin">Preview authorized workspace →</Link>
       </Card>
     </main>
   );
 }
 
 export function QueuePage() {
+  const [purpose, setPurpose] = useState("Triage submitted safety reports");
+  const cases = useQuery({
+    queryKey: ["cases", purpose],
+    queryFn: () =>
+      adminApi<
+        Array<{
+          id: string;
+          reason: string;
+          priority: string;
+          state: string;
+          createdAt: string;
+        }>
+      >(`/v1/admin/cases?purpose=${encodeURIComponent(purpose)}`),
+    enabled: purpose.length >= 8,
+  });
   return (
     <div className="admin-stack">
       <header className="admin-heading">
@@ -38,13 +63,17 @@ export function QueuePage() {
           <p className="admin-kicker">TRIAGE WORKSPACE</p>
           <h1>Case queue</h1>
           <p>
-            Interface-only sample data. No reports or personal data are loaded.
+            Purpose-bound reports with minimum context. Every read is audited.
           </p>
         </div>
-        <Badge tone="warning">Authorization pending</Badge>
+        <Badge tone="warning">MFA enforced</Badge>
       </header>
       <section aria-label="Queue filters" className="admin-filters">
-        <Input disabled label="Search safe case ID" placeholder="CASE-…" />
+        <Input
+          label="Access purpose"
+          onChange={(event) => setPurpose(event.target.value)}
+          value={purpose}
+        />
         <Select defaultValue="open" disabled label="State">
           <option value="open">Open</option>
           <option value="reviewing">Reviewing</option>
@@ -53,31 +82,64 @@ export function QueuePage() {
           <option value="all">All priorities</option>
         </Select>
       </section>
-      <Card className="queue-card">
-        <div className="queue-card__header">
-          <div>
-            <Badge tone="danger">P1 sample</Badge>
-            <strong>CASE-PREVIEW</strong>
+      {cases.error ? (
+        <Card>
+          <p role="alert">{cases.error.message}</p>
+        </Card>
+      ) : null}
+      {cases.data?.map((item) => (
+        <Card className="queue-card" key={item.id}>
+          <div className="queue-card__header">
+            <div>
+              <Badge tone="danger">{item.priority}</Badge>
+              <strong>{item.id}</strong>
+            </div>
+            <span>{item.state}</span>
           </div>
-          <span>Unassigned</span>
+          <h2>{item.reason.replaceAll("_", " ")}</h2>
+          <p>{new Date(item.createdAt).toLocaleString()}</p>
+          <Link
+            to={`/admin/cases/${item.id}?purpose=${encodeURIComponent(purpose)}`}
+          >
+            Open audited case →
+          </Link>
+        </Card>
+      ))}
+      {cases.isLoading ? (
+        <div aria-label="Loading queue" className="admin-loading">
+          <Skeleton height="5rem" />
+          <Skeleton height="5rem" />
         </div>
-        <h2>Report context remains purpose-bound.</h2>
-        <p>
-          The real queue will show reason, age, and assignment only when the
-          operator’s role and case purpose permit it.
-        </p>
-        <Link to="/admin/cases/preview">Open interface preview →</Link>
-      </Card>
-      <div aria-label="Loading queue example" className="admin-loading">
-        <Skeleton height="5rem" />
-        <Skeleton height="5rem" />
-      </div>
+      ) : null}
+      {cases.data?.length === 0 ? (
+        <Card>
+          <h2>Queue clear</h2>
+          <p>No cases match this view.</p>
+        </Card>
+      ) : null}
     </div>
   );
 }
 
 export function CasePage() {
   const { caseId = "unknown" } = useParams();
+  const purpose =
+    new URLSearchParams(location.search).get("purpose") ??
+    "Review assigned safety report";
+  const [reveal, setReveal] = useState(false);
+  const detail = useQuery({
+    queryKey: ["case", caseId, purpose, reveal],
+    queryFn: () =>
+      adminApi<{
+        reason: string;
+        note: string | null;
+        priority: string;
+        state: string;
+        evidence: Array<{ id: string; excerpt: string }>;
+      }>(
+        `/v1/admin/cases/${caseId}?purpose=${encodeURIComponent(purpose)}&revealEvidence=${reveal}`,
+      ),
+  });
   return (
     <div className="admin-stack">
       <header className="admin-heading">
@@ -85,27 +147,33 @@ export function CasePage() {
           <p className="admin-kicker">CASE · {caseId.toUpperCase()}</p>
           <h1>Minimum necessary context.</h1>
           <p>
-            Evidence reveal and sanctions are intentionally disabled until role
-            authorization and append-only audit exist.
+            Evidence is hidden by default and each reveal creates an audit
+            event.
           </p>
         </div>
-        <Badge>Interface preview</Badge>
+        <Badge>{detail.data?.state ?? "Loading"}</Badge>
       </header>
       <div className="case-grid">
         <Card>
           <p className="admin-kicker">REPORT SUMMARY</p>
-          <h2>No report loaded</h2>
-          <p>
-            This placeholder proves the case route without exposing a casual
-            “view everything” surface.
-          </p>
+          <h2>
+            {detail.data?.reason?.replaceAll("_", " ") ?? "Loading report"}
+          </h2>
+          <p>{detail.data?.note ?? "No reporter note supplied."}</p>
+          <Button onClick={() => setReveal(true)}>
+            Reveal minimum evidence
+          </Button>
+          {detail.data?.evidence.map((item) => (
+            <blockquote key={item.id}>{item.excerpt}</blockquote>
+          ))}
         </Card>
         <Card>
           <p className="admin-kicker">AVAILABLE ACTIONS</p>
-          <h2>Fail closed</h2>
+          <h2>Role and reauthentication protected</h2>
           <p>
-            Privileged controls will remain unavailable whenever MFA,
-            permission, purpose, or audit writing is missing.
+            Sanctions require a documented reason, evidence for permanent
+            action, a sufficiently privileged role, recent MFA, and a successful
+            audit write.
           </p>
           <Button disabled variant="danger">
             Apply sanction
@@ -142,6 +210,46 @@ export function AdminPage({
           land before data.
         </p>
       </Card>
+    </div>
+  );
+}
+
+export function AppealsPage() {
+  const purpose = "Independent appeal review";
+  const appeals = useQuery({
+    queryKey: ["appeals"],
+    queryFn: () =>
+      adminApi<
+        Array<{
+          id: string;
+          sanctionId: string;
+          state: string;
+          createdAt: string;
+        }>
+      >(`/v1/admin/appeals?purpose=${encodeURIComponent(purpose)}`),
+  });
+  return (
+    <div className="admin-stack">
+      <header className="admin-heading">
+        <div>
+          <p className="admin-kicker">SECOND REVIEW</p>
+          <h1>Appeals</h1>
+          <p>The sanctioning operator cannot review the same appeal.</p>
+        </div>
+      </header>
+      {appeals.data?.map((item) => (
+        <Card key={item.id}>
+          <Badge>{item.state}</Badge>
+          <h2>Appeal {item.id}</h2>
+          <p>Sanction {item.sanctionId}</p>
+        </Card>
+      ))}
+      {appeals.data?.length === 0 ? (
+        <Card>
+          <h2>No pending appeals</h2>
+        </Card>
+      ) : null}
+      {appeals.error ? <p role="alert">{appeals.error.message}</p> : null}
     </div>
   );
 }

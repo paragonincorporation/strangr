@@ -203,6 +203,78 @@ export const directCallCreateSchema = z.object({
 export const directCallActionSchema = z.object({
     action: z.enum(["accept", "reject", "cancel", "end"]),
 });
+export const reportReasonSchema = z.enum([
+    "sexual_content",
+    "harassment",
+    "hate_or_threats",
+    "minor_safety",
+    "spam_or_scam",
+    "self_harm",
+    "other",
+]);
+export const reportCreateSchema = z
+    .object({
+    clientRequestId: idempotencyKeySchema,
+    reason: reportReasonSchema,
+    note: z.string().trim().max(1_000).optional(),
+    encounterId: internalIdSchema.optional(),
+    callId: internalIdSchema.optional(),
+    messageId: internalIdSchema.optional(),
+    leaveAfterSubmit: z.boolean().default(false),
+})
+    .refine((value) => [value.encounterId, value.callId, value.messageId].filter(Boolean)
+    .length === 1, "Exactly one report context is required");
+export const adminRoleSchema = z.enum([
+    "support",
+    "moderator",
+    "admin",
+    "superadmin",
+]);
+export const caseFilterSchema = z.object({
+    state: z.enum(["open", "reviewing", "resolved"]).optional(),
+    priority: z.enum(["standard", "high", "urgent"]).optional(),
+});
+export const caseAssignSchema = z.object({
+    assigneeId: internalIdSchema,
+    purpose: z.string().trim().min(8).max(240),
+});
+export const sanctionTypeSchema = z.enum([
+    "warning",
+    "matching_restriction",
+    "contact_restriction",
+    "temporary_suspension",
+    "full_ban",
+    "profile_removal",
+    "verification_challenge",
+]);
+export const sanctionCreateSchema = z
+    .object({
+    type: sanctionTypeSchema,
+    permanent: z.boolean().default(false),
+    endsAt: timestampSchema.optional(),
+    reason: z.string().trim().min(10).max(1_000),
+    evidenceReferences: z.array(internalIdSchema).max(20).default([]),
+    purpose: z.string().trim().min(8).max(240),
+})
+    .refine((x) => x.permanent ||
+    Boolean(x.endsAt) ||
+    x.type === "warning" ||
+    x.type === "profile_removal" ||
+    x.type === "verification_challenge", "A temporary sanction needs an end time")
+    .refine((x) => !x.permanent || x.evidenceReferences.length > 0, "Permanent sanctions require evidence");
+export const sanctionReverseSchema = z.object({
+    reason: z.string().trim().min(10).max(1_000),
+    purpose: z.string().trim().min(8).max(240),
+});
+export const appealCreateSchema = z.object({
+    sanctionId: internalIdSchema,
+    statement: z.string().trim().min(20).max(2_000),
+});
+export const appealReviewSchema = z.object({
+    decision: z.enum(["upheld", "granted"]),
+    reason: z.string().trim().min(10).max(1_000),
+    purpose: z.string().trim().min(8).max(240),
+});
 export const encounterSchema = z.object({
     id: internalIdSchema,
     mode: matchModeSchema,

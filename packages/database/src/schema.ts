@@ -414,10 +414,115 @@ export const callParticipants = pgTable(
   (table) => [primaryKey({ columns: [table.callId, table.userId] })],
 );
 
+export const reportReasonEnum = pgEnum("report_reason", [
+  "sexual_content",
+  "harassment",
+  "hate_or_threats",
+  "minor_safety",
+  "spam_or_scam",
+  "self_harm",
+  "other",
+]);
+export const reportStateEnum = pgEnum("report_state", [
+  "submitted",
+  "triaged",
+  "closed",
+]);
+export const caseStateEnum = pgEnum("moderation_case_state", [
+  "open",
+  "reviewing",
+  "resolved",
+]);
+export const casePriorityEnum = pgEnum("moderation_case_priority", [
+  "standard",
+  "high",
+  "urgent",
+]);
+
+export const reports = pgTable(
+  "reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reporterId: uuid("reporter_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    encounterId: uuid("encounter_id").references(() => encounters.id, {
+      onDelete: "set null",
+    }),
+    callId: uuid("call_id").references(() => calls.id, {
+      onDelete: "set null",
+    }),
+    messageId: uuid("message_id").references(() => messages.id, {
+      onDelete: "set null",
+    }),
+    reason: reportReasonEnum("reason").notNull(),
+    note: text("note"),
+    state: reportStateEnum("state").notNull().default("submitted"),
+    clientRequestId: text("client_request_id").notNull(),
+    flaggedAsSpam: boolean("flagged_as_spam").notNull().default(false),
+    retentionUntil: timestamp("retention_until", {
+      withTimezone: true,
+    }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("reports_reporter_request_uidx").on(
+      table.reporterId,
+      table.clientRequestId,
+    ),
+    index("reports_reporter_created_idx").on(table.reporterId, table.createdAt),
+    check("reports_not_self", sql`${table.reporterId} <> ${table.subjectId}`),
+    check(
+      "reports_note_length",
+      sql`${table.note} is null or char_length(${table.note}) <= 1000`,
+    ),
+    check(
+      "reports_has_context",
+      sql`num_nonnulls(${table.encounterId}, ${table.callId}, ${table.messageId}) >= 1`,
+    ),
+  ],
+);
+
+export const moderationCases = pgTable("moderation_cases", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  reportId: uuid("report_id")
+    .notNull()
+    .unique()
+    .references(() => reports.id, { onDelete: "restrict" }),
+  subjectId: uuid("subject_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  state: caseStateEnum("state").notNull().default("open"),
+  priority: casePriorityEnum("priority").notNull().default("standard"),
+  assignedTo: uuid("assigned_to").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  retentionUntil: timestamp("retention_until", {
+    withTimezone: true,
+  }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const reportEvidence = pgTable(
   "report_evidence",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    reportId: uuid("report_id").references(() => reports.id, {
+      onDelete: "cascade",
+    }),
     encounterId: uuid("encounter_id").references(() => encounters.id, {
       onDelete: "set null",
     }),
@@ -435,6 +540,174 @@ export const reportEvidence = pgTable(
     check(
       "report_evidence_excerpt_length",
       sql`char_length(${table.excerpt}) between 1 and 500`,
+    ),
+  ],
+);
+
+export const adminRoleEnum = pgEnum("admin_role", [
+  "support",
+  "moderator",
+  "admin",
+  "superadmin",
+]);
+export const adminRoles = pgTable("admin_roles", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  role: adminRoleEnum("role").notNull(),
+  grantedBy: uuid("granted_by").references(() => users.id, {
+    onDelete: "restrict",
+  }),
+  grantedAt: timestamp("granted_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});
+export const adminAuditLogs = pgTable(
+  "admin_audit_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    action: text("action").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: uuid("target_id").notNull(),
+    purpose: text("purpose").notNull(),
+    caseId: uuid("case_id").references(() => moderationCases.id, {
+      onDelete: "restrict",
+    }),
+    result: text("result").notNull(),
+    changeSummary: jsonb("change_summary")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("admin_audit_actor_idx").on(table.actorId, table.createdAt),
+  ],
+);
+export const moderationActions = pgTable("moderation_actions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  caseId: uuid("case_id")
+    .notNull()
+    .references(() => moderationCases.id, { onDelete: "restrict" }),
+  actorId: uuid("actor_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  action: text("action").notNull(),
+  summary: jsonb("summary")
+    .$type<Record<string, unknown>>()
+    .notNull()
+    .default({}),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const sanctionTypeEnum = pgEnum("sanction_type", [
+  "warning",
+  "matching_restriction",
+  "contact_restriction",
+  "temporary_suspension",
+  "full_ban",
+  "profile_removal",
+  "verification_challenge",
+]);
+export const sanctionStateEnum = pgEnum("sanction_state", [
+  "active",
+  "expired",
+  "reversed",
+]);
+export const sanctions = pgTable(
+  "sanctions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    caseId: uuid("case_id")
+      .notNull()
+      .references(() => moderationCases.id, { onDelete: "restrict" }),
+    type: sanctionTypeEnum("type").notNull(),
+    startsAt: timestamp("starts_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    permanent: boolean("permanent").notNull().default(false),
+    reason: text("reason").notNull(),
+    evidenceReferences: jsonb("evidence_references")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    state: sanctionStateEnum("state").notNull().default("active"),
+    reversedBy: uuid("reversed_by").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    reversedAt: timestamp("reversed_at", { withTimezone: true }),
+    reversalReason: text("reversal_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("sanctions_active_subject_idx").on(
+      table.subjectId,
+      table.state,
+      table.endsAt,
+    ),
+    check(
+      "sanctions_duration",
+      sql`(${table.permanent} and ${table.endsAt} is null) or (not ${table.permanent})`,
+    ),
+  ],
+);
+export const appealStateEnum = pgEnum("appeal_state", [
+  "submitted",
+  "reviewing",
+  "upheld",
+  "granted",
+]);
+export const appeals = pgTable(
+  "appeals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sanctionId: uuid("sanction_id")
+      .notNull()
+      .references(() => sanctions.id, { onDelete: "restrict" }),
+    appellantId: uuid("appellant_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    statement: text("statement").notNull(),
+    state: appealStateEnum("state").notNull().default("submitted"),
+    reviewerId: uuid("reviewer_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    decisionReason: text("decision_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("appeals_sanction_appellant_uidx").on(
+      table.sanctionId,
+      table.appellantId,
+    ),
+    check(
+      "appeals_statement_length",
+      sql`char_length(${table.statement}) between 20 and 2000`,
     ),
   ],
 );

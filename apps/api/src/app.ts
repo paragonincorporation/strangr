@@ -26,12 +26,19 @@ import {
   messageDeleteSchema,
   directCallCreateSchema,
   directCallActionSchema,
+  reportCreateSchema,
+  caseAssignSchema,
+  sanctionCreateSchema,
+  sanctionReverseSchema,
+  appealCreateSchema,
+  appealReviewSchema,
 } from "@paramingle/contracts";
 import {
   BlockRepository,
   EncounterRepository,
   FriendRepository,
   CommunicationRepository,
+  ModerationRepository,
   createAesGcmFieldEncryptor,
   createDatabase,
 } from "@paramingle/database";
@@ -72,6 +79,7 @@ export interface CreateAppOptions {
   blocks?: BlockRepository;
   friends?: FriendRepository;
   communications?: CommunicationRepository;
+  moderation?: ModerationRepository;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -92,7 +100,8 @@ export function createApp(options: CreateAppOptions = {}) {
     options.encounters &&
     options.blocks &&
     options.friends &&
-    options.communications
+    options.communications &&
+    options.moderation
       ? null
       : createDatabase(config.DATABASE_URL);
   const encryptor = createAesGcmFieldEncryptor(
@@ -123,6 +132,8 @@ export function createApp(options: CreateAppOptions = {}) {
   const friends = options.friends ?? new FriendRepository(connection!.db);
   const communications =
     options.communications ?? new CommunicationRepository(connection!.db);
+  const moderation =
+    options.moderation ?? new ModerationRepository(connection!.db);
   if ("setBlockChecker" in realtime)
     realtime.setBlockChecker((first, second) =>
       blocks.hasEitherDirection(first, second),
@@ -140,8 +151,11 @@ export function createApp(options: CreateAppOptions = {}) {
           if (
             key.startsWith(`${userId}:`) &&
             socket.readyState === WebSocket.OPEN
-          )
+          ) {
             socket.send(message);
+            if (message.includes('"type":"capability.revoked"'))
+              socket.close(4003, "Capability revoked");
+          }
       });
     } catch (cause) {
       app.log.warn(
@@ -203,7 +217,11 @@ export function createApp(options: CreateAppOptions = {}) {
     }
   };
   const guard =
-    (capability: Capability) =>
+    (
+      capability: Capability,
+      feature?:
+        "matching" | "messages" | "requests" | "calls" | "profile" | "realtime",
+    ) =>
     async (request: FastifyRequest, reply: FastifyReply) => {
       await authenticate(request, reply);
       if (reply.sent) return;
@@ -219,6 +237,58 @@ export function createApp(options: CreateAppOptions = {}) {
           .send(
             error(code, "This account cannot perform that action", request.id),
           );
+      if (feature) {
+        const restriction = await moderation.restriction(auth.user.id, feature);
+        if (restriction)
+          return reply
+            .code(403)
+            .send(
+              error(
+                restriction,
+                "This account cannot perform that action",
+                request.id,
+              ),
+            );
+      }
+    };
+  const adminGuard =
+    (
+      minimum: "support" | "moderator" | "admin" | "superadmin",
+      highRisk = false,
+    ) =>
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      await authenticate(request, reply);
+      if (reply.sent) return;
+      const origin = request.headers.origin;
+      if (origin && !config.ADMIN_ALLOWED_ORIGINS.includes(origin))
+        return reply
+          .code(403)
+          .send(error("forbidden", "Admin origin required", request.id));
+      const identity = request.auth!.identity;
+      const maxAge = highRisk ? 5 * 60 : 8 * 60 * 60;
+      if (
+        identity.assuranceLevel !== "aal2" ||
+        !identity.authenticatedAt ||
+        Date.now() / 1000 - identity.authenticatedAt > maxAge
+      )
+        return reply
+          .code(403)
+          .send(
+            error(
+              "forbidden",
+              highRisk
+                ? "Recent MFA reauthentication required"
+                : "MFA required",
+              request.id,
+            ),
+          );
+      try {
+        await moderation.requireRole(request.auth!.user.id, minimum);
+      } catch {
+        return reply
+          .code(403)
+          .send(error("forbidden", "Admin permission required", request.id));
+      }
     };
   const route =
     <T>(
@@ -272,7 +342,7 @@ export function createApp(options: CreateAppOptions = {}) {
   );
   app.post(
     "/v1/realtime/tickets",
-    { preHandler: guard("contact") },
+    { preHandler: guard("contact", "realtime") },
     async (req, reply) => {
       try {
         const identity = await accounts.realtimeIdentity(
@@ -287,7 +357,7 @@ export function createApp(options: CreateAppOptions = {}) {
   );
   app.post(
     "/v1/matches/tickets",
-    { preHandler: guard("contact") },
+    { preHandler: guard("contact", "matching") },
     route(matchJoinRequestSchema, async (req, input) => {
       const identity = await accounts.realtimeIdentity(
         req.auth!.user.id,
@@ -619,7 +689,7 @@ export function createApp(options: CreateAppOptions = {}) {
   );
   app.post(
     "/v1/threads/:id/messages",
-    { preHandler: guard("contact") },
+    { preHandler: guard("contact", "messages") },
     route(directMessageSendSchema, async (req, input) => {
       const limit = await realtime.rateLimit(
         `direct-message:user:${req.auth!.user.id}`,
@@ -696,7 +766,7 @@ export function createApp(options: CreateAppOptions = {}) {
   );
   app.post(
     "/v1/calls/direct",
-    { preHandler: guard("contact") },
+    { preHandler: guard("contact", "calls") },
     route(directCallCreateSchema, async (req, input) => {
       if (!(await realtime.isUserOnline(input.friendId)))
         throw new DomainError(
@@ -757,7 +827,7 @@ export function createApp(options: CreateAppOptions = {}) {
   );
   app.post(
     "/v1/calls/direct/:id/actions",
-    { preHandler: guard("contact") },
+    { preHandler: guard("contact", "calls") },
     route(directCallActionSchema, async (req, input) => {
       try {
         const id = (req.params as { id: string }).id;
@@ -801,6 +871,145 @@ export function createApp(options: CreateAppOptions = {}) {
         throw socialError(cause);
       }
     }),
+  );
+  app.post(
+    "/v1/reports",
+    { preHandler: authenticate },
+    route(reportCreateSchema, async (req, input) => {
+      const report = await moderation.createReport(req.auth!.user.id, input);
+      if (input.leaveAfterSubmit) {
+        if (input.encounterId)
+          await realtime.closeMatch(input.encounterId, req.auth!.user.id);
+        if (input.callId) await realtime.releaseDirectCall(input.callId);
+      }
+      return {
+        id: report.id,
+        state: report.state,
+        createdAt: report.createdAt,
+      };
+    }),
+  );
+  app.get("/v1/reports/me", { preHandler: authenticate }, (req) =>
+    moderation.myReports(req.auth!.user.id),
+  );
+  app.get("/v1/sanctions/me", { preHandler: authenticate }, (req) =>
+    moderation.mySanctions(req.auth!.user.id),
+  );
+  app.post(
+    "/v1/appeals",
+    { preHandler: authenticate },
+    route(appealCreateSchema, (req, input) =>
+      moderation.submitAppeal(
+        req.auth!.user.id,
+        input.sanctionId,
+        input.statement,
+      ),
+    ),
+  );
+
+  app.get(
+    "/v1/admin/cases",
+    { preHandler: adminGuard("support") },
+    async (req) => {
+      const query = req.query as {
+        state?: "open" | "reviewing" | "resolved";
+        priority?: "standard" | "high" | "urgent";
+        purpose?: string;
+      };
+      if (!query.purpose || query.purpose.trim().length < 8)
+        throw new DomainError("bad_request", "A case purpose is required");
+      return moderation.queue(req.auth!.user.id, query.purpose, {
+        state: query.state,
+        priority: query.priority,
+      });
+    },
+  );
+  app.get(
+    "/v1/admin/cases/:id",
+    { preHandler: adminGuard("support") },
+    async (req) => {
+      const query = req.query as { purpose?: string; revealEvidence?: string };
+      if (!query.purpose || query.purpose.trim().length < 8)
+        throw new DomainError("bad_request", "A case purpose is required");
+      return moderation.caseDetail(
+        req.auth!.user.id,
+        (req.params as { id: string }).id,
+        query.purpose,
+        query.revealEvidence === "true",
+      );
+    },
+  );
+  app.post(
+    "/v1/admin/cases/:id/assign",
+    { preHandler: adminGuard("moderator") },
+    route(caseAssignSchema, (req, input) =>
+      moderation.assign(
+        req.auth!.user.id,
+        (req.params as { id: string }).id,
+        input.assigneeId,
+        input.purpose,
+      ),
+    ),
+  );
+  app.post(
+    "/v1/admin/cases/:id/sanctions",
+    { preHandler: adminGuard("moderator", true) },
+    route(sanctionCreateSchema, async (req, input) => {
+      const row = await moderation.applySanction(
+        req.auth!.user.id,
+        (req.params as { id: string }).id,
+        { ...input, endsAt: input.endsAt ? new Date(input.endsAt) : undefined },
+        input.purpose,
+      );
+      if (
+        [
+          "matching_restriction",
+          "contact_restriction",
+          "temporary_suspension",
+          "full_ban",
+          "verification_challenge",
+        ].includes(row.type)
+      )
+        await realtime.revokeUser(row.subjectId);
+      return row;
+    }),
+  );
+  app.post(
+    "/v1/admin/sanctions/:id/reverse",
+    { preHandler: adminGuard("admin", true) },
+    route(sanctionReverseSchema, async (req, input) => {
+      const row = await moderation.reverseSanction(
+        req.auth!.user.id,
+        (req.params as { id: string }).id,
+        input.reason,
+        input.purpose,
+      );
+      await realtime.restoreUser(row.subjectId);
+      return row;
+    }),
+  );
+  app.get(
+    "/v1/admin/appeals",
+    { preHandler: adminGuard("moderator") },
+    async (req) => {
+      const purpose = (req.query as { purpose?: string }).purpose;
+      if (!purpose || purpose.length < 8)
+        throw new DomainError("bad_request", "A review purpose is required");
+      return moderation.appealsQueue(req.auth!.user.id, purpose);
+    },
+  );
+  app.post(
+    "/v1/admin/appeals/:id/review",
+    { preHandler: adminGuard("moderator", true) },
+    route(appealReviewSchema, (req, input) =>
+      moderation.reviewAppeal(
+        req.auth!.user.id,
+        (req.params as { id: string }).id,
+        input.decision,
+        input.reason,
+        input.purpose,
+      ),
+    ),
   );
   app.get(
     "/v1/profiles/:username/avatar",
@@ -903,7 +1112,11 @@ export function createApp(options: CreateAppOptions = {}) {
       const heartbeat = setInterval(() => {
         void realtime
           .isSessionRevoked(identity.sessionId)
-          .then((revoked) => {
+          .then(async (revoked) => {
+            revoked ||= await realtime.isUserRevoked(identity.userId);
+            revoked ||= Boolean(
+              await moderation.restriction(identity.userId, "realtime"),
+            );
             if (!alive || revoked) {
               socket.close(4001, "Session unavailable");
               return;
@@ -955,6 +1168,7 @@ export function createApp(options: CreateAppOptions = {}) {
           encounters,
           blocks,
           communications,
+          moderation,
         )
           .then(async (messages) => {
             for (const item of messages)
@@ -1016,7 +1230,8 @@ export function createApp(options: CreateAppOptions = {}) {
       .then(async (identity) => {
         if (
           !identity ||
-          (await realtime.isSessionRevoked(identity.sessionId))
+          (await realtime.isSessionRevoked(identity.sessionId)) ||
+          (await realtime.isUserRevoked(identity.userId))
         ) {
           socket.write(
             "HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n",
@@ -1078,9 +1293,12 @@ async function handleRealtime(
   encounters: EncounterRepository,
   blocks: BlockRepository,
   communications: CommunicationRepository,
+  moderation: ModerationRepository,
 ): Promise<Outbound[]> {
   if (event.type === "connection.ping") return [];
   if (event.type === "match.join") {
+    if (await moderation.restriction(identity.userId, "matching"))
+      throw new Error("capability_revoked");
     const result = await realtime.joinQueue(identity, event.payload.mode);
     if (result.match) {
       await encounters.start(result.match.id, result.match.mode, [
@@ -1112,6 +1330,8 @@ async function handleRealtime(
     event.type === "call.rtc.answer" ||
     event.type === "call.rtc.ice"
   ) {
+    if (await moderation.restriction(identity.userId, "calls"))
+      throw new Error("capability_revoked");
     const callId = event.payload.callId;
     const lease = await realtime.getDirectCall(callId);
     if (
@@ -1220,6 +1440,8 @@ async function handleRealtime(
     return ended;
   }
   if (event.type === "chat.send") {
+    if (await moderation.restriction(identity.userId, "matching"))
+      throw new Error("capability_revoked");
     const sequence = await realtime.nextSequence(match.id);
     const sentAt = new Date().toISOString();
     const saved = await encounters.addRandomMessage(

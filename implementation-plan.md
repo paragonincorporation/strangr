@@ -156,7 +156,10 @@ Execution status as of July 12, 2026:
 | 15    | Complete    | History/friends/requests/profile journeys, exact discovery, privacy-aware projections, bounded pagination, and friend-only leased presence                                  |
 | 16    | Complete    | Ordered/idempotent direct messages, cursor recovery, realtime delivery, read cursors, deletion tombstones, authoritative unread counts, and Messages UI                     |
 | 17    | Complete    | Metadata-only direct voice/video calls, online ringing, atomic busy leases, call-scoped RTC relay, missed calls, media teardown, and retention cleanup                      |
-| 18–28 | Not started | P2 Units 16–17 are complete; Unit 18 is the next implementation unit                                                                                                        |
+| 18    | Complete    | Minimal server-derived report intake, idempotency, bounded evidence, safe status, explicit report-and-leave, and restricted evidence access                                 |
+| 19    | Complete    | Separate AAL2-gated admin workflow, Support/Moderator/Admin/Superadmin authorization, purpose-bound case access, and append-only audits                                     |
+| 20    | Complete    | Granular sanctions, user-safe notices/appeals, separation-of-duty review, capability enforcement, realtime revocation, reversal, and expiry reconciliation                  |
+| 21–28 | Not started | P2 moderation/admin is complete; Unit 21 is the next implementation unit                                                                                                    |
 
 | Priority | Units | Outcome                                                                               |
 | -------- | ----- | ------------------------------------------------------------------------------------- |

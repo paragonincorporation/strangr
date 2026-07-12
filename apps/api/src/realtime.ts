@@ -127,6 +127,43 @@ export class RedisRealtimeStore {
     });
     await this.client.publish(this.key("session-revoked"), sessionId);
   }
+  async isUserRevoked(userId: string) {
+    return (await this.client.exists(this.key("revoked-user", userId))) === 1;
+  }
+  async revokeUser(userId: string) {
+    await this.client.set(this.key("revoked-user", userId), "1", { EX: 60 });
+    for (const partition of [
+      "minor_16_17:text",
+      "minor_16_17:video",
+      "adult_18_plus:text",
+      "adult_18_plus:video",
+    ])
+      await this.client.zRem(this.key("queue", partition), userId);
+    const active = await this.client.get(this.key("active", userId));
+    if (active && active !== "queued") {
+      const direct = active.startsWith("{")
+        ? (JSON.parse(active) as DirectCallLease)
+        : null;
+      if (direct?.callId) await this.releaseDirectCall(direct.callId);
+      else await this.closeMatch(active, userId, 86_400);
+    }
+    await this.client.del([
+      this.key("active", userId),
+      this.key("queue-entry", userId),
+    ]);
+    await this.publishUser(
+      userId,
+      JSON.stringify({
+        version: 1,
+        type: "capability.revoked",
+        requestId: randomUUID(),
+        payload: { reason: "moderation" },
+      }),
+    );
+  }
+  async restoreUser(userId: string) {
+    await this.client.del(this.key("revoked-user", userId));
+  }
   async rateLimit(scope: string, limit: number, windowSeconds: number) {
     const key = this.key("limit", scope);
     const count = await this.client.incr(key);

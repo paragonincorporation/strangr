@@ -15,6 +15,8 @@ describe("authentication and age policy", () => {
       authSessionId: "session-1",
       provider: "google",
       emailVerified: true,
+      assuranceLevel: "aal1",
+      authenticatedAt: null,
     });
   });
 

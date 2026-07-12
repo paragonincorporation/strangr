@@ -6,3 +6,4 @@ export * from "./schema.js";
 export * from "./social.js";
 export * from "./friends.js";
 export * from "./communications.js";
+export * from "./moderation.js";

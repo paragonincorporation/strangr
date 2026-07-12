@@ -8,7 +8,13 @@ import {
 } from "react-router-dom";
 import { RootErrorBoundary } from "./error-boundary.js";
 import { AdminLayout } from "./layout.js";
-import { AdminLogin, AdminPage, CasePage, QueuePage } from "./pages.js";
+import {
+  AdminLogin,
+  AdminPage,
+  AppealsPage,
+  CasePage,
+  QueuePage,
+} from "./pages.js";
 
 export const adminRoutes: RouteObject[] = [
   { path: "/", element: <AdminLogin />, errorElement: <RootErrorBoundary /> },
@@ -31,13 +37,7 @@ export const adminRoutes: RouteObject[] = [
       },
       {
         path: "appeals",
-        element: (
-          <AdminPage
-            eyebrow="SECOND REVIEW"
-            title="Appeals"
-            description="Appeal review and separation-of-duty rules arrive with sanctions in Unit 20."
-          />
-        ),
+        element: <AppealsPage />,
       },
       {
         path: "catalog",

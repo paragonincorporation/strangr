@@ -7,6 +7,8 @@ export interface VerifiedIdentity {
   emailVerified: boolean;
   provider: string;
   authSessionId: string;
+  assuranceLevel: "aal1" | "aal2";
+  authenticatedAt: number | null;
 }
 
 export interface TokenVerifier {
@@ -53,6 +55,8 @@ export function identityFromClaims(payload: JWTPayload): VerifiedIdentity {
       typeof payload.session_id === "string"
         ? payload.session_id
         : (payload.jti ?? payload.sub),
+    assuranceLevel: payload.aal === "aal2" ? "aal2" : "aal1",
+    authenticatedAt: typeof payload.iat === "number" ? payload.iat : null,
   };
 }
 

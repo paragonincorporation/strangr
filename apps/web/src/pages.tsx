@@ -1314,6 +1314,8 @@ export function ConversationPage() {
       ? "text"
       : "video";
   const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState("harassment");
+  const [reportNote, setReportNote] = useState("");
   const [blockOpen, setBlockOpen] = useState(false);
   const [toast, setToast] = useState<string>();
   const [matchId, setMatchId] = useState<string>();
@@ -1485,17 +1487,33 @@ export function ConversationPage() {
     setDraft("");
   };
 
-  const submitReport = (leave: boolean) => {
-    setReportOpen(false);
-    if (leave && matchId) {
-      realtime.current?.send("match.leave", { matchId });
-      teardown();
+  const submitReport = async (leave: boolean) => {
+    if (!matchId) return;
+    try {
+      await api("/v1/reports", {
+        method: "POST",
+        body: JSON.stringify({
+          clientRequestId: crypto.randomUUID(),
+          reason: reportReason,
+          note: reportNote || undefined,
+          encounterId: matchId,
+          leaveAfterSubmit: leave,
+        }),
+      });
+      setReportOpen(false);
+      if (leave) teardown();
+      setToast(
+        leave
+          ? "Report submitted and the conversation was left."
+          : "Report submitted. The conversation remains open.",
+      );
+    } catch (error) {
+      setToast(
+        error instanceof Error
+          ? error.message
+          : "Report could not be submitted",
+      );
     }
-    setToast(
-      leave
-        ? "Report prepared and the conversation was left."
-        : "Report prepared without ending the conversation.",
-    );
   };
 
   return (
@@ -1678,10 +1696,13 @@ export function ConversationPage() {
       <Dialog
         actions={
           <>
-            <Button onClick={() => submitReport(false)} variant="secondary">
+            <Button
+              onClick={() => void submitReport(false)}
+              variant="secondary"
+            >
               Submit report
             </Button>
-            <Button onClick={() => submitReport(true)} variant="danger">
+            <Button onClick={() => void submitReport(true)} variant="danger">
               Submit and leave
             </Button>
           </>
@@ -1692,18 +1713,25 @@ export function ConversationPage() {
         title="What happened?"
       >
         <div className="report-fields">
-          <Select defaultValue="" label="Reason">
-            <option disabled value="">
-              Choose one
-            </option>
+          <Select
+            label="Reason"
+            onChange={(event) => setReportReason(event.target.value)}
+            value={reportReason}
+          >
             <option value="harassment">Harassment</option>
-            <option value="sexual-content">Sexual content</option>
-            <option value="spam">Spam or scam</option>
+            <option value="sexual_content">Sexual content</option>
+            <option value="hate_or_threats">Hate or threats</option>
+            <option value="minor_safety">Minor safety</option>
+            <option value="spam_or_scam">Spam or scam</option>
+            <option value="self_harm">Self-harm concern</option>
+            <option value="other">Other</option>
           </Select>
           <Textarea
             label="Optional note"
-            maxLength={500}
+            maxLength={1000}
+            onChange={(event) => setReportNote(event.target.value)}
             placeholder="Add only the context moderators need."
+            value={reportNote}
           />
         </div>
       </Dialog>
