@@ -11,6 +11,9 @@ import {
   privacySettings,
   friendships,
   friendRequests,
+  LaunchRepository,
+  MatchingPreferenceRepository,
+  entitlementGrants,
 } from "@paramingle/database";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, test } from "vitest";
@@ -28,6 +31,8 @@ const profileRepository = new ProfileRepository(db);
 const encounters = new EncounterRepository(db);
 const blocks = new BlockRepository(db);
 const friends = new FriendRepository(db);
+const launch = new LaunchRepository(db);
+const matching = new MatchingPreferenceRepository(db);
 
 beforeEach(async () => {
   await db.execute(sql`truncate table encounters, users cascade`);
@@ -254,5 +259,68 @@ describe("identity persistence", () => {
         birthDateCiphertext: "ciphertext",
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe("launch country controls", () => {
+  test("denies missing countries and audits an enabled country update", async () => {
+    const actor = await identities.create({ authSubject: randomUUID() });
+    expect(await launch.availability("BD")).toMatchObject({
+      countryCode: "BD",
+      registrationEnabled: false,
+      matchingEnabled: false,
+      billingEnabled: false,
+      reasonCode: "not_reviewed",
+    });
+    await launch.update(actor.id, "bd", {
+      registrationEnabled: true,
+      matchingEnabled: true,
+      billingEnabled: false,
+      reasonCode: "legal_review_complete",
+      purpose: "Approve reviewed launch country",
+    });
+    await launch.observeUser(actor.id, "BD", "integration-test");
+    await expect(
+      launch.requireUser(actor.id, "matching"),
+    ).resolves.toMatchObject({ countryCode: "BD", matchingEnabled: true });
+    await expect(launch.requireUser(actor.id, "billing")).rejects.toThrow(
+      "country_unavailable",
+    );
+  });
+});
+
+describe("matching preferences and entitlements", () => {
+  test("keeps gender filtering paid and builds server-owned criteria", async () => {
+    const user = await identities.create({ authSubject: randomUUID() });
+    await profileRepository.create(
+      user.id,
+      `match_${user.id.slice(0, 6)}`,
+      "Match",
+    );
+    await launch.observeUser(user.id, "BD", "integration-test");
+    const freeInput = {
+      countryPreference: "US" as const,
+      languagePreference: "en",
+      interestTags: ["music"],
+      genderIdentity: "woman" as const,
+      genderPreference: "women" as const,
+      allowPreferenceRelaxation: true,
+    };
+    await expect(matching.update(user.id, freeInput)).rejects.toThrow(
+      "entitlement_required",
+    );
+    await db.insert(entitlementGrants).values({
+      userId: user.id,
+      entitlementKey: "matching.gender_filter",
+      source: "integration",
+      sourceReference: "lite-plan",
+    });
+    await matching.update(user.id, freeInput);
+    expect(await matching.criteria(user.id)).toMatchObject({
+      country: "BD",
+      countryPreference: "US",
+      genderIdentity: "woman",
+      genderPreference: "women",
+    });
   });
 });

@@ -10,6 +10,21 @@ export declare const cursorPageSchema: z.ZodObject<{
     cursor: z.ZodNullable<z.ZodString>;
     hasMore: z.ZodBoolean;
 }, z.core.$strip>;
+export declare const countryCodeSchema: z.ZodString;
+export declare const launchAvailabilitySchema: z.ZodObject<{
+    countryCode: z.ZodString;
+    registrationEnabled: z.ZodBoolean;
+    matchingEnabled: z.ZodBoolean;
+    billingEnabled: z.ZodBoolean;
+    reasonCode: z.ZodString;
+}, z.core.$strip>;
+export declare const launchCountryUpdateSchema: z.ZodObject<{
+    registrationEnabled: z.ZodBoolean;
+    matchingEnabled: z.ZodBoolean;
+    billingEnabled: z.ZodBoolean;
+    reasonCode: z.ZodString;
+    purpose: z.ZodString;
+}, z.core.$strip>;
 export declare const errorCodeSchema: z.ZodEnum<{
     bad_request: "bad_request";
     unauthenticated: "unauthenticated";
@@ -31,6 +46,9 @@ export declare const errorCodeSchema: z.ZodEnum<{
     not_in_match: "not_in_match";
     match_stale: "match_stale";
     already_queued: "already_queued";
+    cooldown_active: "cooldown_active";
+    age_restricted: "age_restricted";
+    country_unavailable: "country_unavailable";
 }>;
 export declare const errorEnvelopeSchema: z.ZodObject<{
     error: z.ZodObject<{
@@ -55,6 +73,9 @@ export declare const errorEnvelopeSchema: z.ZodObject<{
             not_in_match: "not_in_match";
             match_stale: "match_stale";
             already_queued: "already_queued";
+            cooldown_active: "cooldown_active";
+            age_restricted: "age_restricted";
+            country_unavailable: "country_unavailable";
         }>;
         message: z.ZodString;
         requestId: z.ZodString;
@@ -144,6 +165,7 @@ export declare const onboardingRequestSchema: z.ZodDiscriminatedUnion<[z.ZodObje
 }, z.core.$strip>, z.ZodObject<{
     step: z.ZodLiteral<"policies">;
     termsVersion: z.ZodString;
+    privacyVersion: z.ZodString;
     guidelinesVersion: z.ZodString;
 }, z.core.$strip>, z.ZodObject<{
     step: z.ZodLiteral<"profile">;
@@ -400,6 +422,55 @@ export declare const matchJoinRequestSchema: z.ZodObject<{
         video: "video";
     }>;
     allowPreferenceRelaxation: z.ZodDefault<z.ZodBoolean>;
+}, z.core.$strip>;
+export declare const genderIdentitySchema: z.ZodEnum<{
+    man: "man";
+    woman: "woman";
+    nonbinary: "nonbinary";
+    prefer_not_to_say: "prefer_not_to_say";
+}>;
+export declare const genderPreferenceSchema: z.ZodEnum<{
+    everyone: "everyone";
+    nonbinary: "nonbinary";
+    men: "men";
+    women: "women";
+}>;
+export declare const matchingPreferencesSchema: z.ZodObject<{
+    countryPreference: z.ZodNullable<z.ZodString>;
+    languagePreference: z.ZodNullable<z.ZodString>;
+    interestTags: z.ZodArray<z.ZodString>;
+    genderIdentity: z.ZodEnum<{
+        man: "man";
+        woman: "woman";
+        nonbinary: "nonbinary";
+        prefer_not_to_say: "prefer_not_to_say";
+    }>;
+    genderPreference: z.ZodEnum<{
+        everyone: "everyone";
+        nonbinary: "nonbinary";
+        men: "men";
+        women: "women";
+    }>;
+    allowPreferenceRelaxation: z.ZodBoolean;
+}, z.core.$strip>;
+export declare const matchingPreferencesResponseSchema: z.ZodObject<{
+    countryPreference: z.ZodNullable<z.ZodString>;
+    languagePreference: z.ZodNullable<z.ZodString>;
+    interestTags: z.ZodArray<z.ZodString>;
+    genderIdentity: z.ZodEnum<{
+        man: "man";
+        woman: "woman";
+        nonbinary: "nonbinary";
+        prefer_not_to_say: "prefer_not_to_say";
+    }>;
+    genderPreference: z.ZodEnum<{
+        everyone: "everyone";
+        nonbinary: "nonbinary";
+        men: "men";
+        women: "women";
+    }>;
+    allowPreferenceRelaxation: z.ZodBoolean;
+    genderFilterEntitled: z.ZodBoolean;
 }, z.core.$strip>;
 export declare const matchJoinResponseSchema: z.ZodObject<{
     state: z.ZodEnum<{
@@ -674,8 +745,12 @@ export declare const serverRealtimeEnvelopeSchema: z.ZodDiscriminatedUnion<[z.Zo
             not_in_match: "not_in_match";
             match_stale: "match_stale";
             already_queued: "already_queued";
+            cooldown_active: "cooldown_active";
+            age_restricted: "age_restricted";
+            country_unavailable: "country_unavailable";
         }>;
         message: z.ZodString;
+        details: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
     }, z.core.$strip>;
 }, z.core.$strip>, z.ZodObject<{
     version: z.ZodLiteral<1>;
@@ -708,6 +783,8 @@ export declare const serverRealtimeEnvelopeSchema: z.ZodDiscriminatedUnion<[z.Zo
     requestId: z.ZodString;
     payload: z.ZodObject<{
         matchId: z.ZodUUID;
+        connectedAt: z.ZodISODateTime;
+        skipAllowedAt: z.ZodNullable<z.ZodISODateTime>;
     }, z.core.$strip>;
 }, z.core.$strip>, z.ZodObject<{
     version: z.ZodLiteral<1>;
@@ -1005,6 +1082,7 @@ export type ClientRealtimeEnvelope = z.infer<typeof clientRealtimeEnvelopeSchema
 export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>;
 export type OnboardingRequest = z.infer<typeof onboardingRequestSchema>;
 export type MatchMode = z.infer<typeof matchModeSchema>;
+export type MatchingPreferences = z.infer<typeof matchingPreferencesSchema>;
 export type Profile = z.infer<typeof profileSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type VisibilityAudience = z.infer<typeof visibilityAudienceSchema>;

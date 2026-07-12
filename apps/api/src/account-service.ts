@@ -46,6 +46,8 @@ export function deriveAge(birthDate: string, now = new Date()) {
   const date = new Date(Date.UTC(year, month - 1, day));
   if (date.toISOString().slice(0, 10) !== birthDate)
     throw new DomainError("bad_request", "Invalid birth date");
+  if (date.getTime() > now.getTime())
+    throw new DomainError("bad_request", "Invalid birth date");
   let age = now.getUTCFullYear() - year;
   if (
     now.getUTCMonth() + 1 < month ||
@@ -58,12 +60,24 @@ export function deriveAge(birthDate: string, now = new Date()) {
   };
 }
 
+export function requireAdultBirthDate(birthDate: string, now = new Date()) {
+  const result = deriveAge(birthDate, now);
+  if (result.age < 18)
+    throw new DomainError(
+      "age_restricted",
+      "This service is only available to eligible adults",
+      403,
+    );
+  return result;
+}
+
 export class AccountService {
   constructor(
     private db: Database,
     private encryptor: FieldEncryptor,
     private policyVersions = {
       terms: "beta-2026-07",
+      privacy: "beta-2026-07",
       guidelines: "beta-2026-07",
     },
   ) {}
@@ -175,7 +189,7 @@ export class AccountService {
       .where(eq(termsAcceptances.userId, userId));
     const steps: string[] = [];
     if (account.birthDateCiphertext) steps.push("birth_date");
-    if (new Set(acceptances.map((x) => x.policyType)).size === 2)
+    if (new Set(acceptances.map((x) => x.policyType)).size === 3)
       steps.push("policies");
     if (profile) steps.push("profile");
     if (privacy) steps.push("preferences");
@@ -196,26 +210,21 @@ export class AccountService {
   async onboarding(userId: string, input: OnboardingRequest, now = new Date()) {
     await this.db.transaction(async (tx) => {
       if (input.step === "birth_date") {
-        const { age, cohort } = deriveAge(input.birthDate, now);
-        if (age < 16)
-          throw new DomainError(
-            "forbidden",
-            "You must be at least 16 to use Paramingle",
-            403,
-          );
+        requireAdultBirthDate(input.birthDate, now);
         const encrypted = this.encryptor.encrypt(input.birthDate);
         await tx
           .update(users)
           .set({
             birthDateCiphertext: encrypted.ciphertext,
             birthDateKeyVersion: encrypted.keyVersion,
-            ageCohort: cohort,
+            ageCohort: "adult_18_plus",
             updatedAt: now,
           })
           .where(eq(users.id, userId));
       } else if (input.step === "policies") {
         if (
           input.termsVersion !== this.policyVersions.terms ||
+          input.privacyVersion !== this.policyVersions.privacy ||
           input.guidelinesVersion !== this.policyVersions.guidelines
         )
           throw new DomainError(
@@ -230,6 +239,12 @@ export class AccountService {
               userId,
               policyType: "terms",
               policyVersion: input.termsVersion,
+              source: "web_onboarding",
+            },
+            {
+              userId,
+              policyType: "privacy_policy",
+              policyVersion: input.privacyVersion,
               source: "web_onboarding",
             },
             {
@@ -318,9 +333,10 @@ export class AccountService {
       if (
         u?.emailVerified &&
         u.birthDateCiphertext &&
+        u.ageCohort === "adult_18_plus" &&
         p.length &&
         pr.length &&
-        new Set(a.map((x) => x.policyType)).size === 2
+        new Set(a.map((x) => x.policyType)).size === 3
       )
         await tx
           .update(users)
@@ -404,7 +420,11 @@ export class AccountService {
       .limit(1);
     if (!row || row.revokedAt)
       throw new DomainError("unauthenticated", "Session unavailable", 401);
-    if (row.state !== "active" || !row.emailVerified || !row.cohort)
+    if (
+      row.state !== "active" ||
+      !row.emailVerified ||
+      row.cohort !== "adult_18_plus"
+    )
       throw new DomainError(
         "forbidden",
         "Account is not eligible for realtime contact",

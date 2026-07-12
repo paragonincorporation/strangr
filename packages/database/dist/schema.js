@@ -22,6 +22,7 @@ export const visibilityAudienceEnum = pgEnum("visibility_audience", [
 ]);
 export const policyTypeEnum = pgEnum("policy_type", [
     "terms",
+    "privacy_policy",
     "community_guidelines",
 ]);
 const timestamps = {
@@ -90,6 +91,78 @@ export const userSettings = pgTable("user_settings", {
     locale: text("locale").notNull().default("en"),
     ...timestamps,
 });
+export const launchCountries = pgTable("launch_countries", {
+    countryCode: text("country_code").primaryKey(),
+    registrationEnabled: boolean("registration_enabled").notNull().default(false),
+    matchingEnabled: boolean("matching_enabled").notNull().default(false),
+    billingEnabled: boolean("billing_enabled").notNull().default(false),
+    reasonCode: text("reason_code").notNull().default("not_reviewed"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewedBy: uuid("reviewed_by").references(() => users.id, {
+        onDelete: "set null",
+    }),
+    ...timestamps,
+});
+export const userCountryState = pgTable("user_country_state", {
+    userId: uuid("user_id")
+        .primaryKey()
+        .references(() => users.id, { onDelete: "cascade" }),
+    registrationCountry: text("registration_country").notNull(),
+    lastObservedCountry: text("last_observed_country").notNull(),
+    countrySource: text("country_source").notNull(),
+    checkedAt: timestamp("checked_at", { withTimezone: true })
+        .notNull()
+        .defaultNow(),
+    ...timestamps,
+});
+export const genderIdentityEnum = pgEnum("gender_identity", [
+    "man",
+    "woman",
+    "nonbinary",
+    "prefer_not_to_say",
+]);
+export const genderPreferenceEnum = pgEnum("gender_preference", [
+    "everyone",
+    "men",
+    "women",
+    "nonbinary",
+]);
+export const matchingPreferences = pgTable("matching_preferences", {
+    userId: uuid("user_id")
+        .primaryKey()
+        .references(() => users.id, { onDelete: "cascade" }),
+    countryPreference: text("country_preference"),
+    languagePreference: text("language_preference"),
+    interestTags: jsonb("interest_tags").$type().notNull().default([]),
+    genderIdentity: genderIdentityEnum("gender_identity")
+        .notNull()
+        .default("prefer_not_to_say"),
+    genderPreference: genderPreferenceEnum("gender_preference")
+        .notNull()
+        .default("everyone"),
+    allowPreferenceRelaxation: boolean("allow_preference_relaxation")
+        .notNull()
+        .default(false),
+    ...timestamps,
+});
+export const entitlementGrants = pgTable("entitlement_grants", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+        .notNull()
+        .references(() => users.id, { onDelete: "cascade" }),
+    entitlementKey: text("entitlement_key").notNull(),
+    source: text("source").notNull(),
+    sourceReference: text("source_reference").notNull(),
+    validFrom: timestamp("valid_from", { withTimezone: true })
+        .notNull()
+        .defaultNow(),
+    validUntil: timestamp("valid_until", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    ...timestamps,
+}, (table) => [
+    uniqueIndex("entitlement_grants_source_uidx").on(table.userId, table.entitlementKey, table.source, table.sourceReference),
+    index("entitlement_grants_active_idx").on(table.userId, table.entitlementKey, table.validUntil),
+]);
 export const privacySettings = pgTable("privacy_settings", {
     userId: uuid("user_id")
         .primaryKey()

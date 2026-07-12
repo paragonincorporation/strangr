@@ -16,6 +16,17 @@ const second = {
   sessionId: crypto.randomUUID(),
   cohort: "adult_18_plus" as const,
 };
+const criteria = {
+  country: "BD",
+  language: "en",
+  interests: ["music"],
+  countryPreference: null,
+  languagePreference: null,
+  interestTags: [],
+  genderIdentity: "prefer_not_to_say" as const,
+  genderPreference: "everyone" as const,
+  allowPreferenceRelaxation: false,
+};
 
 beforeAll(() => store.connect());
 afterAll(async () => {
@@ -38,14 +49,14 @@ describe("Redis realtime primitives", () => {
     expect(results.filter(Boolean)).toHaveLength(1);
   });
   test("partitions cohorts and atomically pairs eligible users", async () => {
-    expect((await store.joinQueue(first, "text")).match).toBeNull();
+    expect((await store.joinQueue(first, "text", criteria)).match).toBeNull();
     const minor = {
       ...second,
       userId: crypto.randomUUID(),
       cohort: "minor_16_17" as const,
     };
-    expect((await store.joinQueue(minor, "text")).match).toBeNull();
-    const paired = await store.joinQueue(second, "text");
+    expect((await store.joinQueue(minor, "text", criteria)).match).toBeNull();
+    const paired = await store.joinQueue(second, "text", criteria);
     expect(new Set([paired.match?.first, paired.match?.second])).toEqual(
       new Set([first.userId, second.userId]),
     );
@@ -56,5 +67,19 @@ describe("Redis realtime primitives", () => {
     expect(await store.acknowledge(crypto.randomUUID(), first.userId)).toBe(
       false,
     );
+  });
+  test("marks a match connected once and extends its active lease", async () => {
+    const active = await store.activeMatchBetween(first.userId, second.userId);
+    if (active) await store.closeMatch(active.id, first.userId);
+    expect((await store.joinQueue(first, "text", criteria)).match).toBeNull();
+    const paired = (await store.joinQueue(second, "text", criteria)).match!;
+    expect(await store.acknowledge(paired.id, first.userId)).toBeNull();
+    const connectedAt = await store.acknowledge(paired.id, second.userId);
+    expect(connectedAt).toBeTypeOf("string");
+    expect(await store.acknowledge(paired.id, first.userId)).toBe(connectedAt);
+    expect((await store.getMatch(paired.id))?.connectedAt).toBe(connectedAt);
+    expect(
+      await store.client.ttl(`${namespace}:match:${paired.id}`),
+    ).toBeGreaterThan(21);
   });
 });

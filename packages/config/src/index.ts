@@ -75,6 +75,7 @@ const commonServerSchema = z.object({
   SUPABASE_STORAGE_BUCKET: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   CURRENT_TERMS_VERSION: z.string().min(1).max(64),
+  CURRENT_PRIVACY_VERSION: z.string().min(1).max(64),
   CURRENT_GUIDELINES_VERSION: z.string().min(1).max(64),
   BIRTH_DATE_KEY_ID: z.string().min(1).max(64),
   BIRTH_DATE_ENCRYPTION_KEY: base64KeySchema,
@@ -97,6 +98,14 @@ const commonServerSchema = z.object({
     .min(10)
     .max(120)
     .default(30),
+  COUNTRY_HEADER_NAME: z
+    .string()
+    .regex(/^[a-z0-9-]+$/)
+    .default("cf-ipcountry"),
+  LOCAL_COUNTRY_CODE: z
+    .string()
+    .regex(/^[A-Z]{2}$/)
+    .default("BD"),
 });
 
 const localDefaults = {
@@ -110,6 +119,7 @@ const localDefaults = {
   SUPABASE_STORAGE_BUCKET: "avatars",
   SUPABASE_SERVICE_ROLE_KEY: "local-service-role-placeholder",
   CURRENT_TERMS_VERSION: "beta-2026-07",
+  CURRENT_PRIVACY_VERSION: "beta-2026-07",
   CURRENT_GUIDELINES_VERSION: "beta-2026-07",
   BIRTH_DATE_KEY_ID: "local-v1",
   BIRTH_DATE_ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
@@ -122,6 +132,8 @@ const localDefaults = {
   OPENAPI_ENABLED: "true",
   MESSAGE_DELETE_FOR_EVERYONE_SECONDS: "900",
   DIRECT_CALL_RING_SECONDS: "30",
+  COUNTRY_HEADER_NAME: "x-paramingle-country",
+  LOCAL_COUNTRY_CODE: "BD",
   WEB_ALLOWED_ORIGINS: "http://localhost:5173",
   ADMIN_ALLOWED_ORIGINS: "http://localhost:5174",
   PREVIEW_ALLOWED_ORIGINS: "",
@@ -147,6 +159,32 @@ export function parseServerConfig(
       )
       .join("; ");
     throw new Error(`Invalid server configuration: ${reasons}`);
+  }
+  if (result.data.NODE_ENV === "production") {
+    const placeholders = [
+      "placeholder",
+      "local-only",
+      "development",
+      "example.com",
+      "localhost",
+      "127.0.0.1",
+    ];
+    const sensitive = [
+      "DATABASE_URL",
+      "REDIS_URL",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "BIRTH_DATE_ENCRYPTION_KEY",
+      "TURN_CREDENTIAL_SECRET",
+      "STRIPE_SECRET_KEY",
+      "STRIPE_WEBHOOK_SECRET",
+    ] as const;
+    const unsafe = sensitive.filter((key) =>
+      placeholders.some((token) => String(result.data[key]).includes(token)),
+    );
+    if (unsafe.length)
+      throw new Error(
+        `Invalid server configuration: production placeholders are forbidden for ${unsafe.join(", ")}`,
+      );
   }
   return result.data;
 }

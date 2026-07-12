@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { AgeCohort, MatchMode } from "@paramingle/contracts";
+import type { MatchCriteria } from "@paramingle/database";
 import { createClient, type RedisClientType } from "redis";
 
 export interface RealtimeIdentity {
@@ -16,12 +17,77 @@ export interface MatchRecord {
   first: string;
   second: string;
   expiresAt: string;
+  connectedAt?: string;
 }
 export interface DirectCallLease {
   callId: string;
   callerId: string;
   recipientId: string;
   expiresAt: string;
+}
+
+function acceptsGender(
+  preference: MatchCriteria["genderPreference"],
+  identity: MatchCriteria["genderIdentity"],
+) {
+  return (
+    preference === "everyone" ||
+    (preference === "men" && identity === "man") ||
+    (preference === "women" && identity === "woman") ||
+    (preference === "nonbinary" && identity === "nonbinary")
+  );
+}
+
+export function criteriaCompatible(
+  first: MatchCriteria,
+  second: MatchCriteria,
+  waitMs = 0,
+) {
+  if (
+    !acceptsGender(first.genderPreference, second.genderIdentity) ||
+    !acceptsGender(second.genderPreference, first.genderIdentity)
+  )
+    return false;
+  const relax =
+    first.allowPreferenceRelaxation && second.allowPreferenceRelaxation;
+  const countryLanguageRelaxed = relax && waitMs >= 30_000;
+  const interestsRelaxed = relax && waitMs >= 15_000;
+  if (
+    !countryLanguageRelaxed &&
+    ((first.countryPreference && first.countryPreference !== second.country) ||
+      (second.countryPreference &&
+        second.countryPreference !== first.country) ||
+      (first.languagePreference &&
+        first.languagePreference !== second.language) ||
+      (second.languagePreference &&
+        second.languagePreference !== first.language))
+  )
+    return false;
+  const shares = (wanted: string[], offered: string[]) =>
+    wanted.length === 0 || wanted.some((tag) => offered.includes(tag));
+  return (
+    interestsRelaxed ||
+    (shares(first.interestTags, second.interests) &&
+      shares(second.interestTags, first.interests))
+  );
+}
+
+export function textSkipCooldown(match: MatchRecord, now = Date.now()) {
+  if (match.mode !== "text") return { allowed: true, retryAfterMs: 0 };
+  const connectedAt = match.connectedAt
+    ? new Date(match.connectedAt).getTime()
+    : Number.NaN;
+  const skipAllowedAt = connectedAt + 25_000;
+  const retryAfterMs = skipAllowedAt - now;
+  return {
+    allowed: Number.isFinite(connectedAt) && retryAfterMs <= 0,
+    retryAfterMs: Number.isFinite(retryAfterMs)
+      ? Math.max(0, retryAfterMs)
+      : 25_000,
+    skipAllowedAt: Number.isFinite(skipAllowedAt)
+      ? new Date(skipAllowedAt).toISOString()
+      : undefined,
+  };
 }
 
 export class RedisRealtimeStore {
@@ -176,6 +242,7 @@ export class RedisRealtimeStore {
   async joinQueue(
     identity: RealtimeIdentity,
     mode: MatchMode,
+    criteria: MatchCriteria,
   ): Promise<{ queuedAt: string; match: MatchRecord | null }> {
     const queuedAt = new Date().toISOString();
     const partition = `${identity.cohort}:${mode}`;
@@ -194,6 +261,32 @@ export class RedisRealtimeStore {
             { EX: 120 },
           );
     }
+    const candidates = await this.client.zRangeWithScores(queueKey, 0, 24);
+    for (const candidate of candidates) {
+      const raw = await this.client.get(
+        this.key("queue-entry", candidate.value),
+      );
+      const compatible = (() => {
+        try {
+          return Boolean(
+            raw &&
+            criteriaCompatible(
+              criteria,
+              JSON.parse(raw) as MatchCriteria,
+              Date.now() - candidate.score,
+            ),
+          );
+        } catch {
+          return false;
+        }
+      })();
+      if (!compatible)
+        await this.client.set(
+          this.key("deny", identity.userId, candidate.value),
+          "1",
+          { EX: 5 },
+        );
+    }
     const result = (await this.client.eval(
       `if redis.call('EXISTS', KEYS[1]) == 1 then return {'busy'} end
        local candidates=redis.call('ZRANGE',KEYS[2],0,24)
@@ -210,7 +303,7 @@ export class RedisRealtimeStore {
          return {'matched',peer}
        end
        redis.call('ZADD',KEYS[2],ARGV[2],ARGV[1])
-       redis.call('SET',KEYS[3],ARGV[3],'PX',120000)
+       redis.call('SET',KEYS[3],ARGV[11],'PX',120000)
        redis.call('SET',KEYS[1],'queued','PX',120000)
        return {'queued'}`,
       {
@@ -226,6 +319,7 @@ export class RedisRealtimeStore {
           this.key("deny") + ":",
           this.key("match") + ":",
           expiresAt,
+          JSON.stringify(criteria),
         ],
       },
     )) as string[];
@@ -251,10 +345,41 @@ export class RedisRealtimeStore {
   async acknowledge(matchId: string, userId: string) {
     const match = await this.getMatch(matchId);
     if (!match || (match.first !== userId && match.second !== userId))
-      return false;
-    await this.client.sAdd(this.key("match-acks", matchId), userId);
-    await this.client.expire(this.key("match-acks", matchId), 20);
-    return (await this.client.sCard(this.key("match-acks", matchId))) === 2;
+      return null;
+    const connectedAt = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1_000).toISOString();
+    const result = await this.client.eval(
+      `local raw=redis.call('GET',KEYS[1])
+       if not raw then return nil end
+       redis.call('SADD',KEYS[2],ARGV[1])
+       redis.call('EXPIRE',KEYS[2],20)
+       if redis.call('SCARD',KEYS[2]) < 2 then return nil end
+       local match=cjson.decode(raw)
+       if not match.connectedAt then match.connectedAt=ARGV[2] end
+       match.expiresAt=ARGV[3]
+       local updated=cjson.encode(match)
+       redis.call('SET',KEYS[1],updated,'EX',ARGV[4])
+       redis.call('SET',KEYS[3],ARGV[5],'EX',ARGV[4])
+       redis.call('SET',KEYS[4],ARGV[5],'EX',ARGV[4])
+       redis.call('EXPIRE',KEYS[2],ARGV[4])
+       return match.connectedAt`,
+      {
+        keys: [
+          this.key("match", matchId),
+          this.key("match-acks", matchId),
+          this.key("active", match.first),
+          this.key("active", match.second),
+        ],
+        arguments: [
+          userId,
+          connectedAt,
+          expiresAt,
+          String(6 * 60 * 60),
+          matchId,
+        ],
+      },
+    );
+    return typeof result === "string" ? result : null;
   }
   async closeMatch(matchId: string, userId: string, recentTtlSeconds = 60) {
     const match = await this.getMatch(matchId);

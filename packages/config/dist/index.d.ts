@@ -28,6 +28,7 @@ declare const commonServerSchema: z.ZodObject<{
     SUPABASE_STORAGE_BUCKET: z.ZodString;
     SUPABASE_SERVICE_ROLE_KEY: z.ZodString;
     CURRENT_TERMS_VERSION: z.ZodString;
+    CURRENT_PRIVACY_VERSION: z.ZodString;
     CURRENT_GUIDELINES_VERSION: z.ZodString;
     BIRTH_DATE_KEY_ID: z.ZodString;
     BIRTH_DATE_ENCRYPTION_KEY: z.ZodString;
@@ -43,6 +44,8 @@ declare const commonServerSchema: z.ZodObject<{
     }>>, z.ZodTransform<boolean, "true" | "false">>;
     MESSAGE_DELETE_FOR_EVERYONE_SECONDS: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
     DIRECT_CALL_RING_SECONDS: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
+    COUNTRY_HEADER_NAME: z.ZodDefault<z.ZodString>;
+    LOCAL_COUNTRY_CODE: z.ZodDefault<z.ZodString>;
 }, z.core.$strip>;
 export type ServerConfig = z.infer<typeof commonServerSchema>;
 export declare function parseServerConfig(environment: Record<string, string | undefined>): ServerConfig;

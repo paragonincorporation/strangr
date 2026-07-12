@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
 const directory = path.resolve("packages/database/migrations");
@@ -20,6 +20,17 @@ if (invalid.length) {
 
 if (new Set(files.map((file) => file.slice(0, 4))).size !== files.length) {
   console.error("Migration sequence prefixes must be unique.");
+  process.exit(1);
+}
+
+const journalPath = path.join(directory, "meta", "_journal.json");
+const journal = JSON.parse(await readFile(journalPath, "utf8"));
+const fileTags = files.map((file) => file.replace(/\.sql$/, ""));
+const journalTags = journal.entries.map((entry) => entry.tag);
+if (JSON.stringify(fileTags) !== JSON.stringify(journalTags)) {
+  console.error(
+    `Migration journal mismatch. Files: ${fileTags.join(", ")}; journal: ${journalTags.join(", ")}`,
+  );
   process.exit(1);
 }
 

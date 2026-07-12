@@ -3,7 +3,11 @@ import { parseClientPublicConfig, parseServerConfig } from "./index.js";
 
 describe("validated configuration", () => {
   test("provides safe local defaults", () =>
-    expect(parseServerConfig({ NODE_ENV: "test" }).API_PORT).toBe(3000));
+    expect(parseServerConfig({ NODE_ENV: "test" })).toMatchObject({
+      API_PORT: 3000,
+      COUNTRY_HEADER_NAME: "x-paramingle-country",
+      LOCAL_COUNTRY_CODE: "BD",
+    }));
   test("prefers the platform-provided port and parses exact origin lists", () => {
     const result = parseServerConfig({
       NODE_ENV: "test",

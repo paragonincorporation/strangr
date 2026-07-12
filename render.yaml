@@ -36,6 +36,8 @@ services:
         sync: false
       - key: CURRENT_TERMS_VERSION
         value: beta-2026-07
+      - key: CURRENT_PRIVACY_VERSION
+        value: beta-2026-07
       - key: CURRENT_GUIDELINES_VERSION
         value: beta-2026-07
       - key: BIRTH_DATE_KEY_ID
@@ -96,6 +98,8 @@ services:
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: CURRENT_TERMS_VERSION
+        value: beta-2026-07
+      - key: CURRENT_PRIVACY_VERSION
         value: beta-2026-07
       - key: CURRENT_GUIDELINES_VERSION
         value: beta-2026-07

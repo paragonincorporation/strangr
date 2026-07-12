@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { capabilityError, identityFromClaims } from "./auth.js";
-import { deriveAge } from "./account-service.js";
+import { deriveAge, requireAdultBirthDate } from "./account-service.js";
 
 describe("authentication and age policy", () => {
   test("uses only verified token claims for identity and session binding", () => {
@@ -45,5 +45,18 @@ describe("authentication and age policy", () => {
     expect(() =>
       deriveAge("2011-07-13", new Date("2026-07-13T00:00:00Z")),
     ).not.toThrow();
+    expect(() =>
+      deriveAge("2026-07-14", new Date("2026-07-13T00:00:00Z")),
+    ).toThrow("Invalid birth date");
+  });
+
+  test("rejects under-18 onboarding without exposing a child cohort", () => {
+    const now = new Date("2026-07-13T00:00:00Z");
+    expect(() => requireAdultBirthDate("2008-07-14", now)).toThrow(
+      "This service is only available to eligible adults",
+    );
+    expect(requireAdultBirthDate("2008-07-13", now).cohort).toBe(
+      "adult_18_plus",
+    );
   });
 });

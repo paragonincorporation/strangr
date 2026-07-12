@@ -20,6 +20,21 @@ export const cursorPageSchema = z.object({
     cursor: cursorSchema.nullable(),
     hasMore: z.boolean(),
 });
+export const countryCodeSchema = z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z]{2}$/);
+export const launchAvailabilitySchema = z.object({
+    countryCode: countryCodeSchema,
+    registrationEnabled: z.boolean(),
+    matchingEnabled: z.boolean(),
+    billingEnabled: z.boolean(),
+    reasonCode: z.string().min(2).max(80),
+});
+export const launchCountryUpdateSchema = launchAvailabilitySchema
+    .omit({ countryCode: true })
+    .extend({ purpose: z.string().trim().min(8).max(500) });
 export const errorCodeSchema = z.enum([
     "bad_request",
     "unauthenticated",
@@ -41,6 +56,9 @@ export const errorCodeSchema = z.enum([
     "not_in_match",
     "match_stale",
     "already_queued",
+    "cooldown_active",
+    "age_restricted",
+    "country_unavailable",
 ]);
 export const errorEnvelopeSchema = z.object({
     error: z.object({
@@ -120,6 +138,7 @@ export const onboardingRequestSchema = z.discriminatedUnion("step", [
     z.object({
         step: z.literal("policies"),
         termsVersion: z.string().trim().min(1).max(64),
+        privacyVersion: z.string().trim().min(1).max(64),
         guidelinesVersion: z.string().trim().min(1).max(64),
     }),
     z.object({
@@ -300,6 +319,29 @@ export const matchJoinRequestSchema = z.object({
     mode: matchModeSchema,
     allowPreferenceRelaxation: z.boolean().default(false),
 });
+export const genderIdentitySchema = z.enum([
+    "man",
+    "woman",
+    "nonbinary",
+    "prefer_not_to_say",
+]);
+export const genderPreferenceSchema = z.enum([
+    "everyone",
+    "men",
+    "women",
+    "nonbinary",
+]);
+export const matchingPreferencesSchema = z.object({
+    countryPreference: countryCodeSchema.nullable(),
+    languagePreference: z.string().trim().min(2).max(35).nullable(),
+    interestTags: z.array(z.string().trim().min(1).max(40)).max(12),
+    genderIdentity: genderIdentitySchema,
+    genderPreference: genderPreferenceSchema,
+    allowPreferenceRelaxation: z.boolean(),
+});
+export const matchingPreferencesResponseSchema = matchingPreferencesSchema.extend({
+    genderFilterEntitled: z.boolean(),
+});
 export const matchJoinResponseSchema = z.object({
     state: z.enum(["queued", "matched"]),
     mode: matchModeSchema,
@@ -346,6 +388,7 @@ const connectionPingPayloadSchema = z.object({ sentAt: timestampSchema });
 const errorPayloadSchema = z.object({
     code: errorCodeSchema,
     message: z.string().min(1).max(500),
+    details: z.record(z.string(), z.unknown()).optional(),
 });
 const matchIdPayloadSchema = z.object({ matchId: internalIdSchema });
 const matchJoinPayloadSchema = matchJoinRequestSchema;
@@ -521,7 +564,10 @@ export const serverRealtimeEnvelopeSchema = z.discriminatedUnion("type", [
         version: z.literal(PROTOCOL_VERSION),
         type: z.literal("match.connected"),
         requestId: requestIdSchema,
-        payload: matchIdPayloadSchema,
+        payload: matchIdPayloadSchema.extend({
+            connectedAt: timestampSchema,
+            skipAllowedAt: timestampSchema.nullable(),
+        }),
     }),
     z.object({
         version: z.literal(PROTOCOL_VERSION),

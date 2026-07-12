@@ -14,6 +14,7 @@ import {
   AppealsPage,
   CasePage,
   QueuePage,
+  LaunchCountriesPage,
 } from "./pages.js";
 
 export const adminRoutes: RouteObject[] = [
@@ -25,6 +26,7 @@ export const adminRoutes: RouteObject[] = [
     children: [
       { index: true, element: <QueuePage /> },
       { path: "cases/:caseId", element: <CasePage /> },
+      { path: "launch-countries", element: <LaunchCountriesPage /> },
       {
         path: "users",
         element: (

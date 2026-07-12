@@ -3,6 +3,7 @@ import {
   assertAccountStateTransition,
   canTransitionAccountState,
   createAesGcmFieldEncryptor,
+  normalizeCountryCode,
   normalizeUsername,
 } from "./index.js";
 
@@ -23,5 +24,10 @@ describe("database domain boundaries", () => {
     const encrypted = encryptor.encrypt("2000-01-02");
     expect(encrypted.ciphertext).not.toContain("2000-01-02");
     expect(encryptor.decrypt(encrypted)).toBe("2000-01-02");
+  });
+  test("normalizes ISO country codes and rejects unsafe values", () => {
+    expect(normalizeCountryCode(" bd ")).toBe("BD");
+    expect(() => normalizeCountryCode("BGD")).toThrow("invalid_country");
+    expect(() => normalizeCountryCode("../")).toThrow("invalid_country");
   });
 });

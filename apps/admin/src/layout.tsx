@@ -5,6 +5,7 @@ const links = [
   { to: "/admin", label: "Case queue", end: true },
   { to: "/admin/users", label: "User lookup" },
   { to: "/admin/appeals", label: "Appeals" },
+  { to: "/admin/launch-countries", label: "Launch countries" },
   { to: "/admin/catalog", label: "Catalog" },
   { to: "/admin/audit", label: "Audit" },
   { to: "/admin/health", label: "Health" },

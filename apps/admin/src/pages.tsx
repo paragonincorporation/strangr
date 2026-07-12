@@ -1,5 +1,5 @@
 import { Badge, Button, Card, Input, Select, Skeleton } from "@paramingle/ui";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { adminApi, adminSession } from "./api.js";
@@ -117,6 +117,142 @@ export function QueuePage() {
           <p>No cases match this view.</p>
         </Card>
       ) : null}
+    </div>
+  );
+}
+
+type LaunchCountry = {
+  countryCode: string;
+  registrationEnabled: boolean;
+  matchingEnabled: boolean;
+  billingEnabled: boolean;
+  reasonCode: string;
+};
+
+export function LaunchCountriesPage() {
+  const queryClient = useQueryClient();
+  const [countryCode, setCountryCode] = useState("");
+  const [reasonCode, setReasonCode] = useState("not_reviewed");
+  const [registrationEnabled, setRegistrationEnabled] = useState(false);
+  const [matchingEnabled, setMatchingEnabled] = useState(false);
+  const [billingEnabled, setBillingEnabled] = useState(false);
+  const [purpose, setPurpose] = useState("Review country launch controls");
+  const countries = useQuery({
+    queryKey: ["launch-countries"],
+    queryFn: () => adminApi<LaunchCountry[]>("/v1/admin/launch-countries"),
+  });
+  const update = useMutation({
+    mutationFn: () =>
+      adminApi<LaunchCountry>(
+        `/v1/admin/launch-countries/${encodeURIComponent(countryCode.trim().toUpperCase())}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            registrationEnabled,
+            matchingEnabled,
+            billingEnabled,
+            reasonCode,
+            purpose,
+          }),
+        },
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["launch-countries"] });
+    },
+  });
+  return (
+    <div className="admin-stack">
+      <header className="admin-heading">
+        <div>
+          <p className="admin-kicker">DENY BY DEFAULT</p>
+          <h1>Launch countries</h1>
+          <p>
+            Registration, random matching, and billing are separate switches.
+            Every change requires recent MFA and creates an audit record.
+          </p>
+        </div>
+        <Badge tone="warning">Legal approval required</Badge>
+      </header>
+      <Card>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            update.mutate();
+          }}
+        >
+          <Input
+            label="ISO country code"
+            maxLength={2}
+            minLength={2}
+            onChange={(event) => setCountryCode(event.target.value)}
+            pattern="[A-Za-z]{2}"
+            required
+            value={countryCode}
+          />
+          <Input
+            label="Reason code"
+            maxLength={80}
+            minLength={2}
+            onChange={(event) => setReasonCode(event.target.value)}
+            required
+            value={reasonCode}
+          />
+          <Input
+            label="Audit purpose"
+            minLength={8}
+            onChange={(event) => setPurpose(event.target.value)}
+            required
+            value={purpose}
+          />
+          <label>
+            <input
+              checked={registrationEnabled}
+              onChange={(event) => setRegistrationEnabled(event.target.checked)}
+              type="checkbox"
+            />{" "}
+            Registration enabled
+          </label>
+          <label>
+            <input
+              checked={matchingEnabled}
+              onChange={(event) => setMatchingEnabled(event.target.checked)}
+              type="checkbox"
+            />{" "}
+            Random matching enabled
+          </label>
+          <label>
+            <input
+              checked={billingEnabled}
+              onChange={(event) => setBillingEnabled(event.target.checked)}
+              type="checkbox"
+            />{" "}
+            Billing enabled
+          </label>
+          <Button
+            disabled={
+              update.isPending ||
+              !/^[A-Za-z]{2}$/.test(countryCode) ||
+              purpose.length < 8
+            }
+            type="submit"
+            variant="danger"
+          >
+            Save audited controls
+          </Button>
+        </form>
+        {update.error ? <p role="alert">{update.error.message}</p> : null}
+      </Card>
+      {countries.data?.map((country) => (
+        <Card key={country.countryCode}>
+          <h2>{country.countryCode}</h2>
+          <p>{country.reasonCode}</p>
+          <p>
+            Registration: {country.registrationEnabled ? "on" : "off"} ·
+            Matching: {country.matchingEnabled ? "on" : "off"} · Billing:{" "}
+            {country.billingEnabled ? "on" : "off"}
+          </p>
+        </Card>
+      ))}
     </div>
   );
 }

@@ -34,6 +34,14 @@ Production origin variables are comma-separated exact URLs:
 
 Do not use an unrestricted `*.vercel.app` wildcard. HTTP CORS and WebSocket upgrades use the same allowlist.
 
+## Country eligibility header
+
+The API resolves production launch eligibility from `COUNTRY_HEADER_NAME`, which defaults to `cf-ipcountry`. The public API hostname must be proxied through the configured trusted edge, and the Render origin hostname must not be exposed as a supported client endpoint. The edge must overwrite the country header; it must never forward a client-supplied value.
+
+Local development uses `x-paramingle-country` and falls back to `LOCAL_COUNTRY_CODE`. Neither local behavior nor a browser-provided country is a production trust signal. A missing or malformed production header resolves to `ZZ` and is denied by default.
+
+Country rows also deny registration, matching, and billing by default. An AAL2-authenticated admin must enable each switch separately after the corresponding human approval.
+
 ## Release order
 
 1. Run `npm ci`, `npm run check`, and the relevant integration suite.

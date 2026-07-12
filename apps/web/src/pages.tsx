@@ -25,6 +25,32 @@ import { MediaManager } from "./media.js";
 import { RealtimeClient } from "./realtime-client.js";
 
 export function LandingPage() {
+  const [availability, setAvailability] = useState<
+    | { countryCode: string; registrationEnabled: boolean; reasonCode: string }
+    | undefined
+  >();
+  useEffect(() => {
+    if (typeof fetch !== "function") return;
+    const apiUrl = String(import.meta.env.VITE_API_URL ?? location.origin);
+    void fetch(`${apiUrl}/v1/launch/availability`)
+      .then((response) => (response.ok ? response.json() : undefined))
+      .then((value: unknown) => {
+        if (
+          value &&
+          typeof value === "object" &&
+          "countryCode" in value &&
+          "registrationEnabled" in value
+        )
+          setAvailability(
+            value as {
+              countryCode: string;
+              registrationEnabled: boolean;
+              reasonCode: string;
+            },
+          );
+      })
+      .catch(() => undefined);
+  }, []);
   return (
     <main className="landing" id="main-content">
       <section className="landing-hero">
@@ -41,16 +67,22 @@ export function LandingPage() {
             One tap to meet. Mutual consent to stay connected.
           </p>
           <div className="hero-actions">
-            <Link className="hero-primary" to="/auth/sign-in">
-              Create your account <b>↗</b>
-            </Link>
+            {availability && !availability.registrationEnabled ? (
+              <span className="hero-primary" role="status">
+                Beta is not open in {availability.countryCode} yet
+              </span>
+            ) : (
+              <Link className="hero-primary" to="/auth/sign-in">
+                Create your account <b>↗</b>
+              </Link>
+            )}
             <Link className="hero-secondary" to="/conversation/video">
               Preview the call room <span>→</span>
             </Link>
           </div>
           <ul className="principles" aria-label="Paramingle principles">
-            <li>16+ accounts</li>
-            <li>Age-safe cohorts</li>
+            <li>18+ accounts</li>
+            <li>Adult-only beta</li>
             <li>Block anytime</li>
             <li>No recordings</li>
           </ul>
@@ -84,7 +116,7 @@ export function LandingPage() {
           <Card>
             <b>01</b>
             <h3>Age-safe matching</h3>
-            <p>16–17 and adult matching stay strictly separate.</p>
+            <p>Only verified adult accounts can enter random matching.</p>
           </Card>
           <Card>
             <b>02</b>
@@ -233,11 +265,21 @@ export function OnboardingPage() {
   const [accept, setAccept] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const latestAdultBirthDate = (() => {
+    const date = new Date();
+    date.setUTCFullYear(date.getUTCFullYear() - 18);
+    return date.toISOString().slice(0, 10);
+  })();
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setMessage("");
     try {
+      const policyVersions = await api<{
+        termsVersion: string;
+        privacyVersion: string;
+        guidelinesVersion: string;
+      }>("/v1/policies/current");
       await api("/v1/me/onboarding", {
         method: "POST",
         body: JSON.stringify({ step: "birth_date", birthDate }),
@@ -246,8 +288,7 @@ export function OnboardingPage() {
         method: "POST",
         body: JSON.stringify({
           step: "policies",
-          termsVersion: "beta-2026-07",
-          guidelinesVersion: "beta-2026-07",
+          ...policyVersions,
         }),
       });
       await api("/v1/me/onboarding", {
@@ -290,12 +331,13 @@ export function OnboardingPage() {
         <p className="eyebrow">ONE-TIME SETUP</p>
         <h1>Identity without forced exposure.</h1>
         <p className="muted">
-          Your exact birthday stays encrypted and private. The server derives
-          your matching cohort.
+          Paramingle beta is for adults 18 and older. Your exact birthday stays
+          encrypted and private.
         </p>
         <form onSubmit={(event) => void submit(event)}>
           <Input
             label="Date of birth"
+            max={latestAdultBirthDate}
             onChange={(e) => setBirthDate(e.target.value)}
             required
             type="date"
@@ -329,7 +371,7 @@ export function OnboardingPage() {
               onChange={(e) => setAccept(e.target.checked)}
               type="checkbox"
             />{" "}
-            I accept the Terms and Community Guidelines.
+            I accept the Terms, Privacy Policy, and Community Guidelines.
           </label>
           <Button disabled={!accept || busy} fullWidth type="submit">
             Continue safely
@@ -859,6 +901,35 @@ export function SettingsPage() {
   const [sessions, setSessions] = useState<
     Array<{ id: string; deviceLabel: string | null; lastSeenAt: string }>
   >([]);
+  const [matching, setMatching] = useState({
+    countryPreference: "",
+    languagePreference: "",
+    interestTags: "",
+    genderIdentity: "prefer_not_to_say",
+    genderPreference: "everyone",
+    allowPreferenceRelaxation: false,
+    genderFilterEntitled: false,
+  });
+  useEffect(() => {
+    void api<{
+      countryPreference: string | null;
+      languagePreference: string | null;
+      interestTags: string[];
+      genderIdentity: string;
+      genderPreference: string;
+      allowPreferenceRelaxation: boolean;
+      genderFilterEntitled: boolean;
+    }>("/v1/me/matching-preferences")
+      .then((value) =>
+        setMatching({
+          ...value,
+          countryPreference: value.countryPreference ?? "",
+          languagePreference: value.languagePreference ?? "",
+          interestTags: value.interestTags.join(", "),
+        }),
+      )
+      .catch(() => undefined);
+  }, []);
   const load = async () => {
     try {
       setSessions(await api("/v1/me/sessions"));
@@ -875,6 +946,39 @@ export function SettingsPage() {
   const signOut = async () => {
     await supabase?.auth.signOut();
     setMessage("Signed out.");
+  };
+  const saveMatching = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      const result = await api<typeof matching>("/v1/me/matching-preferences", {
+        method: "PUT",
+        body: JSON.stringify({
+          countryPreference:
+            matching.countryPreference.trim().toUpperCase() || null,
+          languagePreference: matching.languagePreference.trim() || null,
+          interestTags: matching.interestTags
+            .split(",")
+            .map((tag) => tag.trim())
+            .filter(Boolean),
+          genderIdentity: matching.genderIdentity,
+          genderPreference: matching.genderPreference,
+          allowPreferenceRelaxation: matching.allowPreferenceRelaxation,
+        }),
+      });
+      setMatching({
+        ...result,
+        countryPreference: result.countryPreference ?? "",
+        languagePreference: result.languagePreference ?? "",
+        interestTags: Array.isArray(result.interestTags)
+          ? result.interestTags.join(", ")
+          : String(result.interestTags),
+      });
+      setMessage("Matching preferences saved.");
+    } catch (err) {
+      setMessage(
+        err instanceof Error ? err.message : "Could not save preferences",
+      );
+    }
   };
   return (
     <div className="page-stack">
@@ -914,6 +1018,89 @@ export function SettingsPage() {
           ))}
         </ul>
         <p role="status">{message}</p>
+      </Card>
+      <Card>
+        <h2>Random matching preferences</h2>
+        <form onSubmit={(event) => void saveMatching(event)}>
+          <Input
+            label="Preferred country (optional ISO code)"
+            maxLength={2}
+            onChange={(event) =>
+              setMatching((value) => ({
+                ...value,
+                countryPreference: event.target.value,
+              }))
+            }
+            pattern="[A-Za-z]{2}"
+            value={matching.countryPreference}
+          />
+          <Input
+            label="Preferred language (optional)"
+            onChange={(event) =>
+              setMatching((value) => ({
+                ...value,
+                languagePreference: event.target.value,
+              }))
+            }
+            value={matching.languagePreference}
+          />
+          <Input
+            label="Interests, separated by commas"
+            onChange={(event) =>
+              setMatching((value) => ({
+                ...value,
+                interestTags: event.target.value,
+              }))
+            }
+            value={matching.interestTags}
+          />
+          <Select
+            label="Your gender (private matching field)"
+            onChange={(event) =>
+              setMatching((value) => ({
+                ...value,
+                genderIdentity: event.target.value,
+              }))
+            }
+            value={matching.genderIdentity}
+          >
+            <option value="prefer_not_to_say">Prefer not to say</option>
+            <option value="man">Man</option>
+            <option value="woman">Woman</option>
+            <option value="nonbinary">Nonbinary</option>
+          </Select>
+          <Select
+            disabled={!matching.genderFilterEntitled}
+            label="Gender preference (Lite and above)"
+            onChange={(event) =>
+              setMatching((value) => ({
+                ...value,
+                genderPreference: event.target.value,
+              }))
+            }
+            value={matching.genderPreference}
+          >
+            <option value="everyone">Everyone</option>
+            <option value="men">Men</option>
+            <option value="women">Women</option>
+            <option value="nonbinary">Nonbinary people</option>
+          </Select>
+          <label>
+            <input
+              checked={matching.allowPreferenceRelaxation}
+              onChange={(event) =>
+                setMatching((value) => ({
+                  ...value,
+                  allowPreferenceRelaxation: event.target.checked,
+                }))
+              }
+              type="checkbox"
+            />{" "}
+            Broaden interests after 15 seconds and country/language after 30
+            seconds
+          </label>
+          <Button type="submit">Save matching preferences</Button>
+        </form>
       </Card>
     </div>
   );
@@ -1326,6 +1513,8 @@ export function ConversationPage() {
   >([]);
   const [draft, setDraft] = useState("");
   const [permissionError, setPermissionError] = useState(permissionDenied);
+  const [skipAllowedAt, setSkipAllowedAt] = useState<number | null>(null);
+  const [clock, setClock] = useState(() => Date.now());
   const localVideo = useRef<HTMLVideoElement>(null);
   const remoteVideo = useRef<HTMLVideoElement>(null);
   const media = useRef(new MediaManager());
@@ -1345,9 +1534,22 @@ export function ConversationPage() {
           client.send("match.ack", { matchId: id });
           if (event.payload.initiator === true && mode === "video")
             void createOffer(id);
-        } else if (event.type === "match.connected")
+        } else if (event.type === "match.connected") {
           call.setStatus("connected");
-        else if (event.type === "match.ended") {
+          const unlock = event.payload.skipAllowedAt;
+          setSkipAllowedAt(
+            typeof unlock === "string" ? new Date(unlock).getTime() : null,
+          );
+        } else if (event.type === "error") {
+          if (event.payload.code === "cooldown_active") {
+            const details = event.payload.details as
+              Record<string, unknown> | undefined;
+            const unlock = details?.skipAllowedAt;
+            if (typeof unlock === "string")
+              setSkipAllowedAt(new Date(unlock).getTime());
+          }
+          setToast(String(event.payload.message));
+        } else if (event.type === "match.ended") {
           teardown();
           call.setStatus("ended");
           setToast("The encounter ended.");
@@ -1382,9 +1584,12 @@ export function ConversationPage() {
           }
         }
       await client.connect();
+      const preference = await api<{ allowPreferenceRelaxation: boolean }>(
+        "/v1/me/matching-preferences",
+      );
       client.send("match.join", {
         mode: permissionError ? "text" : mode,
-        allowPreferenceRelaxation: false,
+        allowPreferenceRelaxation: preference.allowPreferenceRelaxation,
       });
     };
     void start().catch((error) =>
@@ -1400,6 +1605,12 @@ export function ConversationPage() {
     // The encounter owns these resources for the route lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!skipAllowedAt || skipAllowedAt <= Date.now()) return;
+    const timer = window.setInterval(() => setClock(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [skipAllowedAt]);
 
   async function ensurePeer() {
     if (peer.current) return peer.current;
@@ -1472,6 +1683,7 @@ export function ConversationPage() {
     if (localVideo.current) localVideo.current.srcObject = null;
     if (remoteVideo.current) remoteVideo.current.srcObject = null;
     setMatchId(undefined);
+    setSkipAllowedAt(null);
     setMessages([]);
   }
   const sendMessage = (event: React.FormEvent) => {
@@ -1486,6 +1698,10 @@ export function ConversationPage() {
     setMessages((items) => [...items, { id, text: draft, mine: true }]);
     setDraft("");
   };
+  const skipSeconds = skipAllowedAt
+    ? Math.max(0, Math.ceil((skipAllowedAt - clock) / 1_000))
+    : 0;
+  const nextLocked = mode === "text" && Boolean(matchId) && skipSeconds > 0;
 
   const submitReport = async (leave: boolean) => {
     if (!matchId) return;
@@ -1645,7 +1861,9 @@ export function ConversationPage() {
           <b>{call.videoEnabled && mode === "video" ? "ON" : "OFF"}</b>
         </button>
         <button
+          aria-describedby={nextLocked ? "text-next-cooldown" : undefined}
           className="call-dock__next"
+          disabled={!matchId || nextLocked}
           onClick={() => {
             if (matchId) {
               realtime.current?.send("match.next", { matchId });
@@ -1654,9 +1872,15 @@ export function ConversationPage() {
           }}
           type="button"
         >
-          <span>NEXT</span>
-          <b>↗</b>
+          <span>{nextLocked ? `NEXT IN ${skipSeconds}` : "NEXT"}</span>
+          <b>{nextLocked ? `${skipSeconds}s` : "↗"}</b>
         </button>
+        {nextLocked ? (
+          <span className="sr-only" id="text-next-cooldown" role="status">
+            Next unlocks in {skipSeconds} seconds. Leave, report, and block are
+            still available.
+          </span>
+        ) : null}
         <button
           aria-expanded={call.chatOpen}
           onClick={call.toggleChat}

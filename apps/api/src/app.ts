@@ -32,6 +32,9 @@ import {
   sanctionReverseSchema,
   appealCreateSchema,
   appealReviewSchema,
+  countryCodeSchema,
+  launchCountryUpdateSchema,
+  matchingPreferencesSchema,
 } from "@paramingle/contracts";
 import {
   BlockRepository,
@@ -41,6 +44,8 @@ import {
   ModerationRepository,
   createAesGcmFieldEncryptor,
   createDatabase,
+  LaunchRepository,
+  MatchingPreferenceRepository,
 } from "@paramingle/database";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -54,7 +59,11 @@ import {
   type VerifiedIdentity,
 } from "./auth.js";
 import { AvatarService, SupabaseStorage } from "./avatar-service.js";
-import { RedisRealtimeStore, type RealtimeIdentity } from "./realtime.js";
+import {
+  RedisRealtimeStore,
+  textSkipCooldown,
+  type RealtimeIdentity,
+} from "./realtime.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -64,6 +73,7 @@ declare module "fastify" {
         id: string;
         accountState: AccountState;
         emailVerified: boolean;
+        ageCohort: "minor_16_17" | "adult_18_plus" | null;
       };
     };
   }
@@ -80,6 +90,8 @@ export interface CreateAppOptions {
   friends?: FriendRepository;
   communications?: CommunicationRepository;
   moderation?: ModerationRepository;
+  launch?: LaunchRepository;
+  matchingPreferences?: MatchingPreferenceRepository;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -101,7 +113,9 @@ export function createApp(options: CreateAppOptions = {}) {
     options.blocks &&
     options.friends &&
     options.communications &&
-    options.moderation
+    options.moderation &&
+    options.launch &&
+    options.matchingPreferences
       ? null
       : createDatabase(config.DATABASE_URL);
   const encryptor = createAesGcmFieldEncryptor(
@@ -112,6 +126,7 @@ export function createApp(options: CreateAppOptions = {}) {
     options.accounts ??
     new AccountService(connection!.db, encryptor, {
       terms: config.CURRENT_TERMS_VERSION,
+      privacy: config.CURRENT_PRIVACY_VERSION,
       guidelines: config.CURRENT_GUIDELINES_VERSION,
     });
   const avatars =
@@ -134,6 +149,19 @@ export function createApp(options: CreateAppOptions = {}) {
     options.communications ?? new CommunicationRepository(connection!.db);
   const moderation =
     options.moderation ?? new ModerationRepository(connection!.db);
+  const launch = options.launch ?? new LaunchRepository(connection!.db);
+  const matchingPreferences =
+    options.matchingPreferences ??
+    new MatchingPreferenceRepository(connection!.db);
+  const countryFromRequest = (request: FastifyRequest) => {
+    const value = request.headers[config.COUNTRY_HEADER_NAME];
+    const candidate = Array.isArray(value) ? value[0] : value;
+    const parsed = countryCodeSchema.safeParse(
+      candidate ??
+        (config.NODE_ENV === "production" ? "ZZ" : config.LOCAL_COUNTRY_CODE),
+    );
+    return parsed.success ? parsed.data : "ZZ";
+  };
   if ("setBlockChecker" in realtime)
     realtime.setBlockChecker((first, second) =>
       blocks.hasEitherDirection(first, second),
@@ -202,6 +230,7 @@ export function createApp(options: CreateAppOptions = {}) {
           id: user.id,
           accountState: user.accountState,
           emailVerified: user.emailVerified,
+          ageCohort: user.ageCohort,
         },
       };
     } catch {
@@ -237,6 +266,16 @@ export function createApp(options: CreateAppOptions = {}) {
           .send(
             error(code, "This account cannot perform that action", request.id),
           );
+      if (capability === "contact" && auth.user.ageCohort !== "adult_18_plus")
+        return reply
+          .code(403)
+          .send(
+            error(
+              "age_restricted",
+              "This service is only available to eligible adults",
+              request.id,
+            ),
+          );
       if (feature) {
         const restriction = await moderation.restriction(auth.user.id, feature);
         if (restriction)
@@ -249,6 +288,31 @@ export function createApp(options: CreateAppOptions = {}) {
                 request.id,
               ),
             );
+      }
+    };
+  const launchGuard =
+    (capability: "registration" | "matching" | "billing") =>
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const countryCode = countryFromRequest(request);
+      try {
+        await launch.require(countryCode, capability);
+        if (request.auth)
+          await launch.observeUser(
+            request.auth.user.id,
+            countryCode,
+            config.COUNTRY_HEADER_NAME,
+          );
+      } catch {
+        return reply
+          .code(451)
+          .send(
+            error(
+              "country_unavailable",
+              "Paramingle is not available in this region yet",
+              request.id,
+              { countryCode, capability },
+            ),
+          );
       }
     };
   const adminGuard =
@@ -312,6 +376,14 @@ export function createApp(options: CreateAppOptions = {}) {
         return domainReply(reply, request.id, e);
       }
     };
+  app.get("/v1/launch/availability", async (request) =>
+    launch.availability(countryFromRequest(request)),
+  );
+  app.get("/v1/policies/current", () => ({
+    termsVersion: config.CURRENT_TERMS_VERSION,
+    privacyVersion: config.CURRENT_PRIVACY_VERSION,
+    guidelinesVersion: config.CURRENT_GUIDELINES_VERSION,
+  }));
   app.get(
     "/v1/me",
     { preHandler: guard("inspect_self") },
@@ -325,6 +397,28 @@ export function createApp(options: CreateAppOptions = {}) {
   );
   app.get("/v1/me/sessions", { preHandler: guard("inspect_self") }, (req) =>
     accounts.sessions(req.auth!.user.id),
+  );
+  app.get(
+    "/v1/me/matching-preferences",
+    { preHandler: guard("contact") },
+    (req) => matchingPreferences.get(req.auth!.user.id),
+  );
+  app.put(
+    "/v1/me/matching-preferences",
+    { preHandler: guard("contact") },
+    route(matchingPreferencesSchema, async (req, input) => {
+      try {
+        return await matchingPreferences.update(req.auth!.user.id, input);
+      } catch (cause) {
+        if (cause instanceof Error && cause.message === "entitlement_required")
+          throw new DomainError(
+            "forbidden",
+            "Lite or above is required for gender preference",
+            403,
+          );
+        throw cause;
+      }
+    }),
   );
   app.delete(
     "/v1/me/sessions/:id",
@@ -342,7 +436,9 @@ export function createApp(options: CreateAppOptions = {}) {
   );
   app.post(
     "/v1/realtime/tickets",
-    { preHandler: guard("contact", "realtime") },
+    {
+      preHandler: [guard("contact", "realtime"), launchGuard("matching")],
+    },
     async (req, reply) => {
       try {
         const identity = await accounts.realtimeIdentity(
@@ -357,7 +453,9 @@ export function createApp(options: CreateAppOptions = {}) {
   );
   app.post(
     "/v1/matches/tickets",
-    { preHandler: guard("contact", "matching") },
+    {
+      preHandler: [guard("contact", "matching"), launchGuard("matching")],
+    },
     route(matchJoinRequestSchema, async (req, input) => {
       const identity = await accounts.realtimeIdentity(
         req.auth!.user.id,
@@ -374,7 +472,11 @@ export function createApp(options: CreateAppOptions = {}) {
           `Retry in ${Math.max(1, Math.ceil(limit.retryAfterMs / 1000))} seconds`,
           429,
         );
-      const result = await realtime.joinQueue(identity, input.mode);
+      const criteria = await matchingPreferences.criteria(identity.userId);
+      const result = await realtime.joinQueue(identity, input.mode, {
+        ...criteria,
+        allowPreferenceRelaxation: input.allowPreferenceRelaxation,
+      });
       if (result.match) {
         await encounters.start(result.match.id, result.match.mode, [
           result.match.first,
@@ -420,7 +522,9 @@ export function createApp(options: CreateAppOptions = {}) {
   );
   app.post(
     "/v1/me/onboarding",
-    { preHandler: guard("profile_setup") },
+    {
+      preHandler: [guard("profile_setup"), launchGuard("registration")],
+    },
     route(onboardingRequestSchema, (req, input) =>
       accounts.onboarding(req.auth!.user.id, input),
     ),
@@ -925,6 +1029,23 @@ export function createApp(options: CreateAppOptions = {}) {
     },
   );
   app.get(
+    "/v1/admin/launch-countries",
+    { preHandler: adminGuard("admin") },
+    () => launch.list(),
+  );
+  app.put(
+    "/v1/admin/launch-countries/:countryCode",
+    { preHandler: adminGuard("admin", true) },
+    route(launchCountryUpdateSchema, (req, input) => {
+      const country = countryCodeSchema.safeParse(
+        (req.params as { countryCode: string }).countryCode,
+      );
+      if (!country.success)
+        throw new DomainError("bad_request", "Invalid country code");
+      return launch.update(req.auth!.user.id, country.data, input);
+    }),
+  );
+  app.get(
     "/v1/admin/cases/:id",
     { preHandler: adminGuard("support") },
     async (req) => {
@@ -1169,6 +1290,8 @@ export function createApp(options: CreateAppOptions = {}) {
           blocks,
           communications,
           moderation,
+          launch,
+          matchingPreferences,
         )
           .then(async (messages) => {
             for (const item of messages)
@@ -1294,12 +1417,19 @@ async function handleRealtime(
   blocks: BlockRepository,
   communications: CommunicationRepository,
   moderation: ModerationRepository,
+  launch: LaunchRepository,
+  matchingPreferences: MatchingPreferenceRepository,
 ): Promise<Outbound[]> {
   if (event.type === "connection.ping") return [];
   if (event.type === "match.join") {
+    await launch.requireUser(identity.userId, "matching");
     if (await moderation.restriction(identity.userId, "matching"))
       throw new Error("capability_revoked");
-    const result = await realtime.joinQueue(identity, event.payload.mode);
+    const criteria = await matchingPreferences.criteria(identity.userId);
+    const result = await realtime.joinQueue(identity, event.payload.mode, {
+      ...criteria,
+      allowPreferenceRelaxation: event.payload.allowPreferenceRelaxation,
+    });
     if (result.match) {
       await encounters.start(result.match.id, result.match.mode, [
         result.match.first,
@@ -1385,21 +1515,49 @@ async function handleRealtime(
   if (await blocks.hasEitherDirection(identity.userId, peerId))
     throw new Error("relationship_unavailable");
   if (event.type === "match.ack") {
-    const connected = await realtime.acknowledge(match.id, identity.userId);
-    if (connected) await encounters.connected(match.id);
-    return connected
+    const connectedAt = await realtime.acknowledge(match.id, identity.userId);
+    if (connectedAt) await encounters.connected(match.id);
+    const skipAllowedAt =
+      connectedAt && match.mode === "text"
+        ? new Date(new Date(connectedAt).getTime() + 25_000).toISOString()
+        : null;
+    return connectedAt
       ? [match.first, match.second].map((userId) => ({
           userId,
           event: {
             version: PROTOCOL_VERSION,
             type: "match.connected" as const,
             requestId: event.requestId,
-            payload: { matchId: match.id },
+            payload: { matchId: match.id, connectedAt, skipAllowedAt },
           },
         }))
       : [];
   }
   if (event.type === "match.leave" || event.type === "match.next") {
+    if (event.type === "match.next" && match.mode === "text") {
+      const cooldown = textSkipCooldown(match);
+      if (!cooldown.allowed)
+        return [
+          {
+            userId: identity.userId,
+            event: {
+              version: PROTOCOL_VERSION,
+              type: "error",
+              requestId: event.requestId,
+              payload: {
+                code: "cooldown_active",
+                message: "Next unlocks 25 seconds after text chat connects",
+                details: {
+                  retryAfterMs: cooldown.retryAfterMs,
+                  ...(cooldown.skipAllowedAt
+                    ? { skipAllowedAt: cooldown.skipAllowedAt }
+                    : {}),
+                },
+              },
+            },
+          },
+        ];
+    }
     await realtime.closeMatch(match.id, identity.userId);
     await encounters.end(
       match.id,
@@ -1424,7 +1582,8 @@ async function handleRealtime(
       },
     }));
     if (event.type === "match.next") {
-      const result = await realtime.joinQueue(identity, match.mode);
+      const criteria = await matchingPreferences.criteria(identity.userId);
+      const result = await realtime.joinQueue(identity, match.mode, criteria);
       if (result.match) await publishMatch(realtime, result.match);
       else
         ended.push({
