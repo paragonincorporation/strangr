@@ -18,9 +18,14 @@ import {
   launchCountries,
   userCountryState,
   conversationRatings,
+  BillingRepository,
+  EntitlementService,
 } from "@paramingle/database";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, test } from "vitest";
+import { AccountService } from "../../apps/api/src/account-service.js";
+import type { ObjectStorage } from "../../apps/api/src/avatar-service.js";
+import { PrivacyService } from "../../apps/api/src/privacy-service.js";
 
 const databaseUrl =
   process.env.DATABASE_URL ??
@@ -38,6 +43,19 @@ const friends = new FriendRepository(db);
 const launch = new LaunchRepository(db);
 const matching = new MatchingPreferenceRepository(db);
 const engagement = new EngagementRepository(db);
+const billing = new BillingRepository(db);
+const entitlementService = new EntitlementService(db);
+const accounts = new AccountService(db, encryptor);
+const storage: ObjectStorage = {
+  put: () => Promise.resolve(),
+  get: () => Promise.resolve(new Uint8Array()),
+  delete: () => Promise.resolve(),
+  signedUrl: (key, seconds) =>
+    Promise.resolve(
+      `https://storage.example.test/${encodeURIComponent(key)}?ttl=${seconds}`,
+    ),
+};
+const privacy = new PrivacyService(db, storage);
 
 beforeEach(async () => {
   await db.execute(sql`truncate table encounters, users cascade`);
@@ -241,6 +259,41 @@ describe("ratings, safe cards, and reconnect", () => {
     );
   });
 
+  test("automatically authorizes only the documented safe card for Maxed Out", async () => {
+    const [viewer, subject] = await eligiblePair();
+    const id = randomUUID();
+    await encounters.start(id, "video", [viewer, subject]);
+    await db.insert(entitlementGrants).values({
+      userId: viewer,
+      entitlementKey: "call_card.paid_override",
+      source: "test",
+      sourceReference: randomUUID(),
+    });
+    const access = await engagement.authorizeCallCard(id, viewer);
+    expect(access).toEqual({
+      subjectId: subject,
+      revealSource: "maxed_entitlement",
+    });
+    const card = await accounts.safeCallCard(
+      access.subjectId,
+      access.revealSource,
+    );
+    expect(Object.keys(card).sort()).toEqual(
+      [
+        "avatarUrl",
+        "country",
+        "displayName",
+        "interests",
+        "language",
+        "revealSource",
+        "username",
+      ].sort(),
+    );
+    expect(JSON.stringify(card)).not.toMatch(
+      /birth|email|bio|device|billing|moderation/i,
+    );
+  });
+
   test("limits reconnect to entitled users and requires recipient acceptance", async () => {
     const [first, second] = await eligiblePair();
     const id = randomUUID();
@@ -271,6 +324,100 @@ describe("ratings, safe cards, and reconnect", () => {
     expect(
       (await engagement.resolveReconnect(offer.id, second, "accept")).state,
     ).toBe("accepted");
+  });
+});
+
+describe("beta plan fixtures", () => {
+  test("seeds one verified adult and effective grants for every V1 plan", async () => {
+    const plans = ["free", "lite", "loaded", "maxed_out"] as const;
+    const fixtures: Array<{ userId: string; plan: (typeof plans)[number] }> =
+      [];
+    for (const plan of plans) {
+      const identity = await identities.create({
+        authSubject: randomUUID(),
+        birthDate: "2000-01-01",
+        cohort: "adult_18_plus",
+      });
+      await db
+        .update(users)
+        .set({ accountState: "active", emailVerified: true })
+        .where(sql`${users.id} = ${identity.id}`);
+      await profileRepository.create(
+        identity.id,
+        `beta_${plan}_${identity.id.slice(0, 6)}`,
+        `${plan} adult`,
+      );
+      if (plan !== "free") {
+        const now = new Date();
+        await billing.applySubscription({
+          userId: identity.id,
+          planKey: plan,
+          customerId: `cus_fixture_${plan}`,
+          subscriptionId: `sub_fixture_${plan}`,
+          status: "active",
+          currentPeriodStart: now,
+          currentPeriodEnd: new Date(now.getTime() + 30 * 86_400_000),
+          cancelAtPeriodEnd: false,
+          canceledAt: null,
+          paymentGraceUntil: null,
+          objectCreatedAt: now,
+        });
+      }
+      fixtures.push({ userId: identity.id, plan });
+    }
+
+    for (const fixture of fixtures) {
+      const effective = await entitlementService.list(fixture.userId);
+      expect(effective.planKey).toBe(fixture.plan);
+      expect(effective.grants.length).toBe(
+        fixture.plan === "free"
+          ? 0
+          : fixture.plan === "lite"
+            ? 2
+            : fixture.plan === "loaded"
+              ? 7
+              : 11,
+      );
+    }
+  });
+
+  test("does not let stale or same-time active events undo revocation", async () => {
+    const identity = await identities.create({
+      authSubject: randomUUID(),
+      birthDate: "2000-01-01",
+      cohort: "adult_18_plus",
+    });
+    const at = new Date();
+    const update = {
+      userId: identity.id,
+      planKey: "loaded" as const,
+      customerId: "cus_ordering",
+      subscriptionId: "sub_ordering",
+      currentPeriodStart: at,
+      currentPeriodEnd: new Date(at.getTime() + 30 * 86_400_000),
+      cancelAtPeriodEnd: false,
+      canceledAt: null,
+      paymentGraceUntil: null,
+    };
+    await billing.applySubscription({
+      ...update,
+      status: "active",
+      objectCreatedAt: new Date(at.getTime() - 1_000),
+    });
+    await billing.applySubscription({
+      ...update,
+      status: "canceled",
+      canceledAt: at,
+      objectCreatedAt: at,
+    });
+    await expect(
+      billing.applySubscription({
+        ...update,
+        status: "active",
+        objectCreatedAt: at,
+      }),
+    ).resolves.toBe(false);
+    expect((await entitlementService.list(identity.id)).planKey).toBe("free");
   });
 });
 
@@ -371,6 +518,46 @@ describe("identity persistence", () => {
     const publicAccount = await identities.findPublicAccount(identity.id);
     expect(JSON.stringify(publicAccount)).not.toContain("birthDate");
     expect(publicAccount?.ageCohort).toBe("adult_18_plus");
+  });
+
+  test("records date of birth once and rejects later mutation", async () => {
+    const identity = await identities.create({ authSubject: randomUUID() });
+    await accounts.onboarding(identity.id, {
+      step: "birth_date",
+      birthDate: "2000-01-02",
+    });
+    await expect(
+      accounts.onboarding(identity.id, {
+        step: "birth_date",
+        birthDate: "1999-01-02",
+      }),
+    ).rejects.toMatchObject({ code: "conflict", status: 409 });
+  });
+
+  test("allows a recently reauthenticated deletion-pending user to cancel", async () => {
+    const identity = await identities.create({
+      authSubject: randomUUID(),
+      birthDate: "2000-01-02",
+      cohort: "adult_18_plus",
+    });
+    await db
+      .update(users)
+      .set({ accountState: "active", emailVerified: true })
+      .where(sql`${users.id} = ${identity.id}`);
+    await privacy.requestDeletion(identity.id);
+    const [pending] = await db
+      .select({ state: users.accountState })
+      .from(users)
+      .where(sql`${users.id} = ${identity.id}`);
+    expect(pending?.state).toBe("deletion_pending");
+    await expect(privacy.cancelDeletion(identity.id)).resolves.toEqual({
+      canceled: true,
+    });
+    const [restored] = await db
+      .select({ state: users.accountState })
+      .from(users)
+      .where(sql`${users.id} = ${identity.id}`);
+    expect(restored?.state).toBe("active");
   });
 
   test("lets the unique normalized username constraint decide a race", async () => {

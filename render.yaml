@@ -7,7 +7,7 @@ services:
     buildCommand: npm ci && npm run build:api
     startCommand: npm start
     healthCheckPath: /health/ready
-    autoDeployTrigger: commit
+    autoDeployTrigger: off
     envVars:
       - key: NODE_VERSION
         value: 22.19.0
@@ -32,14 +32,16 @@ services:
         sync: false
       - key: SUPABASE_STORAGE_BUCKET
         value: avatars
+      - key: SUPABASE_PRIVACY_EXPORT_BUCKET
+        sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: CURRENT_TERMS_VERSION
-        value: beta-2026-07
+        sync: false
       - key: CURRENT_PRIVACY_VERSION
-        value: beta-2026-07
+        sync: false
       - key: CURRENT_GUIDELINES_VERSION
-        value: beta-2026-07
+        sync: false
       - key: BIRTH_DATE_KEY_ID
         sync: false
       - key: BIRTH_DATE_ENCRYPTION_KEY
@@ -52,10 +54,12 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: TURNSTILE_ALLOWED_HOSTNAMES
+        sync: false
       - key: DEPLOYMENT_ENVIRONMENT
-        value: staging
-      - key: DEPLOYMENT_REVISION
-        value: render
+        sync: false
       - key: OPENAPI_ENABLED
         value: "false"
       - key: WEB_ALLOWED_ORIGINS
@@ -63,6 +67,10 @@ services:
       - key: ADMIN_ALLOWED_ORIGINS
         sync: false
       - key: PREVIEW_ALLOWED_ORIGINS
+        sync: false
+      - key: GLOBAL_CONCURRENCY_CEILING
+        sync: false
+      - key: COUNTRY_CONCURRENCY_CEILINGS
         sync: false
 
   - type: cron
@@ -73,6 +81,7 @@ services:
     schedule: "0 * * * *"
     buildCommand: npm ci && npm run build:worker
     startCommand: npm run worker:once
+    autoDeployTrigger: off
     envVars:
       - key: NODE_VERSION
         value: 22.19.0
@@ -95,14 +104,16 @@ services:
         sync: false
       - key: SUPABASE_STORAGE_BUCKET
         value: avatars
+      - key: SUPABASE_PRIVACY_EXPORT_BUCKET
+        sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: CURRENT_TERMS_VERSION
-        value: beta-2026-07
+        sync: false
       - key: CURRENT_PRIVACY_VERSION
-        value: beta-2026-07
+        sync: false
       - key: CURRENT_GUIDELINES_VERSION
-        value: beta-2026-07
+        sync: false
       - key: BIRTH_DATE_KEY_ID
         sync: false
       - key: BIRTH_DATE_ENCRYPTION_KEY
@@ -115,15 +126,21 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: TURNSTILE_ALLOWED_HOSTNAMES
+        sync: false
       - key: DEPLOYMENT_ENVIRONMENT
-        value: staging
-      - key: DEPLOYMENT_REVISION
-        value: render
+        sync: false
       - key: OPENAPI_ENABLED
         value: "false"
       - key: WEB_ALLOWED_ORIGINS
         sync: false
       - key: ADMIN_ALLOWED_ORIGINS
+        sync: false
+      - key: GLOBAL_CONCURRENCY_CEILING
+        sync: false
+      - key: COUNTRY_CONCURRENCY_CEILINGS
         sync: false
 
   - type: keyvalue

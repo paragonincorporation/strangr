@@ -1,0 +1,175 @@
+name: Release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected GitHub environment
+        required: true
+        type: choice
+        options: [staging, production]
+      revision:
+        description: Full reviewed commit SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a full commit SHA
+        run: |
+          if [[ ! "$REVISION" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "revision must be a full lowercase commit SHA" >&2
+            exit 1
+          fi
+        env:
+          REVISION: ${{ inputs.revision }}
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: paramingle
+          POSTGRES_USER: paramingle
+          POSTGRES_PASSWORD: paramingle_release_only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U paramingle -d paramingle"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://paramingle:paramingle_release_only@localhost:5432/paramingle
+      REDIS_URL: redis://localhost:6379
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - run: npm run db:migrate
+      - run: npm run test:integration
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
+  migrate:
+    needs: [verify, integration, e2e]
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - run: npm run migrations:check
+      - run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+
+  deploy_api:
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Trigger reviewed API deployment
+        run: |
+          node -e 'for (const key of ["RENDER_DEPLOY_HOOK", "RENDER_WORKER_DEPLOY_HOOK"]) { const url = new URL(process.env[key]); url.searchParams.set("ref", process.env.REVISION); const response = await fetch(url, { method: "POST" }); if (!response.ok) throw new Error(`${key} failed with ${response.status}`); }'
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+          RENDER_WORKER_DEPLOY_HOOK: ${{ secrets.RENDER_WORKER_DEPLOY_HOOK }}
+          REVISION: ${{ inputs.revision }}
+      - name: Wait for the reviewed API revision and readiness
+        run: >-
+          node -e 'for(let i=0;i<60;i++){const live=await fetch(process.env.LIVE_URL).catch(()=>null); const body=live?.ok ? await live.json().catch(()=>null) : null; const ready=body?.revision===process.env.REVISION ? await fetch(process.env.READY_URL).catch(()=>null) : null; if(ready?.ok) process.exit(0); await new Promise(resolve=>setTimeout(resolve,10000))} process.exit(1)'
+        env:
+          LIVE_URL: ${{ vars.API_LIVE_URL }}
+          READY_URL: ${{ vars.API_READY_URL }}
+          REVISION: ${{ inputs.revision }}
+
+  deploy_clients:
+    needs: deploy_api
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    strategy:
+      matrix:
+        target: [web, admin]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - name: Build and deploy the reviewed client revision
+        run: |
+          npx --yes vercel@55.0.0 pull --yes --environment=production --token="$VERCEL_TOKEN" --cwd="apps/$TARGET"
+          npx --yes vercel@55.0.0 build --prod --token="$VERCEL_TOKEN" --cwd="apps/$TARGET"
+          npx --yes vercel@55.0.0 deploy --prebuilt --prod --token="$VERCEL_TOKEN" --cwd="apps/$TARGET"
+        env:
+          TARGET: ${{ matrix.target }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ matrix.target == 'web' && secrets.VERCEL_WEB_PROJECT_ID || secrets.VERCEL_ADMIN_PROJECT_ID }}
+
+  smoke:
+    needs: deploy_clients
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Public liveness and client smoke
+        run: |
+          curl --fail-with-body --silent --show-error "$API_LIVE_URL"
+          curl --fail-with-body --silent --show-error "$WEB_URL"
+          curl --fail-with-body --silent --show-error "$ADMIN_URL"
+        env:
+          API_LIVE_URL: ${{ vars.API_LIVE_URL }}
+          WEB_URL: ${{ vars.WEB_URL }}
+          ADMIN_URL: ${{ vars.ADMIN_URL }}

@@ -7,6 +7,8 @@ export interface RealtimeIdentity {
   userId: string;
   sessionId: string;
   cohort: AgeCohort;
+  country?: string;
+  capacityReservationId?: string;
 }
 export interface TicketRecord extends RealtimeIdentity {
   expiresAt: string;
@@ -123,14 +125,45 @@ export class RedisRealtimeStore {
   async health() {
     return (await this.client.ping()) === "PONG";
   }
-  async createTicket(identity: RealtimeIdentity, ttlSeconds = 30) {
+  async createTicket(
+    identity: RealtimeIdentity,
+    ttlSeconds = 30,
+    capacity?: { global: number; country: number },
+  ) {
     const ticket = randomBytes(32).toString("base64url");
+    const capacityReservationId = hash(ticket);
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
-    await this.client.set(
+    if (capacity) {
+      if (!identity.country) throw new Error("capacity_country_missing");
+      const expiresAtMs = Date.now() + ttlSeconds * 1_000;
+      const accepted = await this.client.eval(
+        `redis.call('ZREMRANGEBYSCORE',KEYS[1],'-inf',ARGV[1])
+         redis.call('ZREMRANGEBYSCORE',KEYS[2],'-inf',ARGV[1])
+         if redis.call('ZCARD',KEYS[1]) >= tonumber(ARGV[2]) or redis.call('ZCARD',KEYS[2]) >= tonumber(ARGV[3]) then return 0 end
+         redis.call('ZADD',KEYS[1],ARGV[4],ARGV[5]); redis.call('ZADD',KEYS[2],ARGV[4],ARGV[5]); return 1`,
+        {
+          keys: [
+            this.key("capacity", "global"),
+            this.key("capacity", "country", identity.country),
+          ],
+          arguments: [
+            String(Date.now()),
+            String(capacity.global),
+            String(capacity.country),
+            String(expiresAtMs),
+            capacityReservationId,
+          ],
+        },
+      );
+      if (Number(accepted) !== 1) throw new Error("capacity_full");
+    }
+    const stored = await this.client.set(
       this.key("ticket", hash(ticket)),
-      JSON.stringify({ ...identity, expiresAt }),
+      JSON.stringify({ ...identity, capacityReservationId, expiresAt }),
       { EX: ttlSeconds, NX: true },
     );
+    if (!stored && identity.country)
+      await this.releaseCapacity(identity.country, capacityReservationId);
     return { ticket, expiresAt };
   }
   async consumeTicket(ticket: string): Promise<TicketRecord | null> {
@@ -147,6 +180,27 @@ export class RedisRealtimeStore {
     connectionId: string,
     ttlSeconds = 45,
   ) {
+    if (identity.country) {
+      const expiresAtMs = Date.now() + ttlSeconds * 1_000;
+      const transaction = this.client.multi();
+      if (identity.capacityReservationId)
+        transaction
+          .zRem(this.key("capacity", "global"), identity.capacityReservationId)
+          .zRem(
+            this.key("capacity", "country", identity.country),
+            identity.capacityReservationId,
+          );
+      await transaction
+        .zAdd(this.key("capacity", "global"), {
+          score: expiresAtMs,
+          value: connectionId,
+        })
+        .zAdd(this.key("capacity", "country", identity.country), {
+          score: expiresAtMs,
+          value: connectionId,
+        })
+        .exec();
+    }
     await this.client.set(
       this.key("connection", connectionId),
       JSON.stringify(identity),
@@ -171,12 +225,48 @@ export class RedisRealtimeStore {
     await this.bindConnection(identity, connectionId, ttlSeconds);
   }
   async unbindConnection(identity: RealtimeIdentity, connectionId: string) {
-    await Promise.all([
+    const operations = [
       this.client.del(this.key("connection", connectionId)),
       this.client.sRem(
         this.key("user-connections", identity.userId),
         connectionId,
       ),
+    ];
+    if (identity.country)
+      operations.push(
+        this.client.zRem(this.key("capacity", "global"), connectionId),
+        this.client.zRem(
+          this.key("capacity", "country", identity.country),
+          connectionId,
+        ),
+      );
+    await Promise.all(operations);
+  }
+  async capacitySnapshot(country: string) {
+    const now = Date.now();
+    await Promise.all([
+      this.client.zRemRangeByScore(this.key("capacity", "global"), "-inf", now),
+      this.client.zRemRangeByScore(
+        this.key("capacity", "country", country),
+        "-inf",
+        now,
+      ),
+    ]);
+    const [global, local] = await Promise.all([
+      this.client.zCard(this.key("capacity", "global")),
+      this.client.zCard(this.key("capacity", "country", country)),
+    ]);
+    return { global, country: local };
+  }
+  async redisMemoryBytes() {
+    const info = await this.client.info("memory");
+    const match = /^used_memory:(\d+)$/m.exec(info);
+    return match ? Number(match[1]) : null;
+  }
+  private async releaseCapacity(country: string, member: string) {
+    await Promise.all([
+      this.client.zRem(this.key("capacity", "global"), member),
+      this.client.zRem(this.key("capacity", "country", country), member),
     ]);
   }
   async isUserOnline(userId: string) {
@@ -446,14 +536,24 @@ export class RedisRealtimeStore {
       .exec();
     for (const userId of [first, second]) {
       const active = await this.client.get(this.key("active", userId));
-      if (active && active !== "queued")
-        await this.closeMatch(active, userId, 86_400);
-      else
+      if (active && active !== "queued") {
+        const direct = active.startsWith("{")
+          ? (JSON.parse(active) as DirectCallLease)
+          : null;
+        if (direct?.callId) await this.releaseDirectCall(direct.callId);
+        else await this.closeMatch(active, userId, 86_400);
+      } else
         await this.client.del([
           this.key("active", userId),
           this.key("queue-entry", userId),
         ]);
     }
+  }
+  async activeDirectCallBetween(first: string, second: string) {
+    const active = await this.client.get(this.key("active", first));
+    if (!active?.startsWith("{")) return null;
+    const call = JSON.parse(active) as DirectCallLease;
+    return [call.callerId, call.recipientId].includes(second) ? call : null;
   }
   async activeMatchBetween(first: string, second: string) {
     const active = await this.client.get(this.key("active", first));

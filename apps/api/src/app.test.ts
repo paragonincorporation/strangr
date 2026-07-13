@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
+import { parseServerConfig } from "@paramingle/config";
 import { createApp } from "./app.js";
 
 const apps: ReturnType<typeof createApp>[] = [];
@@ -14,7 +15,11 @@ describe("API foundation", () => {
     const live = await app.inject({ method: "GET", url: "/health/live" });
     const ready = await app.inject({ method: "GET", url: "/health/ready" });
     expect(live.statusCode).toBe(200);
-    expect(live.json()).toEqual({ ok: true });
+    expect(live.json()).toEqual({
+      ok: true,
+      environment: "local",
+      revision: "development",
+    });
     expect([200, 503]).toContain(ready.statusCode);
     expect(ready.json()).toEqual({
       ok: ready.statusCode === 200,
@@ -80,6 +85,19 @@ describe("API foundation", () => {
     expect(response.headers["x-frame-options"]).toBe("DENY");
     expect(response.headers["content-security-policy"]).toContain(
       "frame-ancestors 'none'",
+    );
+  });
+
+  test("adds HSTS only for a production-configured API", async () => {
+    const config = {
+      ...parseServerConfig({ NODE_ENV: "test" }),
+      NODE_ENV: "production" as const,
+    };
+    const app = createApp({ config });
+    apps.push(app);
+    const response = await app.inject({ method: "GET", url: "/health/live" });
+    expect(response.headers["strict-transport-security"]).toBe(
+      "max-age=31536000; includeSubDomains",
     );
   });
 });

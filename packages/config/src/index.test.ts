@@ -5,9 +5,29 @@ describe("validated configuration", () => {
   test("provides safe local defaults", () =>
     expect(parseServerConfig({ NODE_ENV: "test" })).toMatchObject({
       API_PORT: 3000,
+      SUPABASE_PRIVACY_EXPORT_BUCKET: "privacy-exports",
+      GLOBAL_CONCURRENCY_CEILING: 1000,
+      COUNTRY_CONCURRENCY_CEILINGS: { BD: 1000 },
       COUNTRY_HEADER_NAME: "x-paramingle-country",
       LOCAL_COUNTRY_CODE: "BD",
     }));
+  test("uses the Render commit and parses reviewed country ceilings", () => {
+    const result = parseServerConfig({
+      NODE_ENV: "test",
+      RENDER_GIT_COMMIT: "reviewed-sha",
+      COUNTRY_CONCURRENCY_CEILINGS: "BD:120,US:80",
+    });
+    expect(result.DEPLOYMENT_REVISION).toBe("reviewed-sha");
+    expect(result.COUNTRY_CONCURRENCY_CEILINGS).toEqual({ BD: 120, US: 80 });
+  });
+  test("rejects malformed country ceilings", () => {
+    expect(() =>
+      parseServerConfig({
+        NODE_ENV: "test",
+        COUNTRY_CONCURRENCY_CEILINGS: "BD:0,usa:20",
+      }),
+    ).toThrow(/COUNTRY_CONCURRENCY_CEILINGS/);
+  });
   test("prefers the platform-provided port and parses exact origin lists", () => {
     const result = parseServerConfig({
       NODE_ENV: "test",
@@ -44,5 +64,15 @@ describe("validated configuration", () => {
       DATABASE_URL: "nope",
     });
     expect(result).not.toHaveProperty("DATABASE_URL");
+  });
+  test("client config rejects insecure production API and auth URLs", () => {
+    expect(() =>
+      parseClientPublicConfig({
+        VITE_API_URL: "http://api.example.com",
+        VITE_SUPABASE_URL: "https://db.example.com",
+        VITE_SUPABASE_ANON_KEY: "public",
+        VITE_DEPLOYMENT_ENVIRONMENT: "production",
+      }),
+    ).toThrow(/VITE_API_URL/);
   });
 });

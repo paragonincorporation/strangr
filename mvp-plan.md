@@ -1,1678 +1,1009 @@
-# Paramingle MVP beta execution plan
+# Paramingle V1 completion and V2 execution plan
 
-Status: authoritative execution plan  
-Owner: unassigned  
-Last updated: July 13, 2026  
-Target: public V1 beta, followed by V2 engagement and monetization expansion
+| Field              | Current value                                                                 |
+| ------------------ | ----------------------------------------------------------------------------- |
+| Status             | Authoritative product and execution plan                                      |
+| Last updated       | July 13, 2026                                                                 |
+| Current position   | V1 agent implementation is complete; human acceptance and launch work remains |
+| Next product track | Finish and accept V1; do not start V2 until the V1 completion gate passes     |
 
-## 1. How agents must use this file
+## 1. What this file is for
 
-This is the source of truth for getting Paramingle from its current repository state to a public beta. Product intent lives here. Existing ADRs and unit handoffs remain the source of truth for implementation details that have already shipped.
+This file answers four questions:
 
-Before changing code, an agent must:
+1. What is locked for V1?
+2. What is actually complete?
+3. What still blocks the V1 beta?
+4. What is the step-by-step V2 sequence after V1 is finished?
 
-1. Read this file, `README.md`, `docs/architecture/open-decisions.md`, and the handoff for the area being changed.
-2. Inspect the current implementation. Do not assume the progress notes in an older plan are current.
-3. Run `git status --short` and preserve unrelated work.
-4. Take one bounded task or a tightly related set of tasks.
-5. Write tests with the implementation.
-6. Add a new migration for schema changes. Never rewrite a migration that may have been applied.
-7. Run the narrow checks while working and `npm run check` before handoff.
-8. Update the progress ledger at the end of this file with files changed, commands run, results, remaining risks, and the exact next task.
+Use these files together:
 
-An agent may not:
+- `mvp-plan.md`: product contract, engineering sequence, and progress ledger.
+- `human-v1.md`: the ordered H1-H19 human launch runbook.
+- `docs/architecture/`: implementation decisions and system boundaries.
+- `docs/operations/`: deployment, load, monitoring, and rehearsal instructions.
+- `README.md`: local setup and command reference.
 
-- invent legal, safety, tax, or business approval;
-- put real credentials in the repository;
-- weaken reporting, blocking, age enforcement, or privacy to make another feature easier;
-- grant an entitlement based on browser state or a Stripe redirect;
-- record video or audio;
-- silently upload call screenshots;
-- issue a permanent sanction solely from an automated classifier;
-- mark a task complete when its manual launch dependency is still missing.
+`plan.md` and `implementation-plan.md` are historical design records. They contain earlier 16+ and single-plan assumptions that no longer describe the V1 beta. When they conflict with this file, this file wins.
 
-Use these labels throughout the plan:
+### Rules for agents
 
-- **Agent:** Codex can implement and verify this work.
-- **Manual:** a named human must do it in a provider dashboard, sign a contract, supply judgment, or approve risk.
-- **Gate:** launch cannot move past this point until the condition is met.
+Before changing code:
 
-## 2. Outcome and success criteria
+1. Read the relevant section here and inspect the current implementation.
+2. Run `git status --short`. Preserve unrelated work.
+3. Keep the change to one plan chunk or a tightly related set of chunks.
+4. Add tests with the implementation.
+5. Add a new forward migration for schema changes. Never rewrite an applied migration.
+6. Do not implement V2 until the V1 completion gate in section 5 passes.
+7. Run focused checks while working and `npm run check` before handoff.
+8. Update only the progress table and short change log. Do not add another long agent diary.
 
-V1 exists to answer one question: do adults enjoy random conversations on Paramingle enough to return?
+Agents must not invent legal, safety, tax, provider, staffing, or launch approval. They must not weaken age checks, blocks, reports, sanctions, privacy, or billing authority to make a feature easier.
 
-The beta is successful when the team can measure, with acceptable safety and reliability:
+### Status labels
 
-- verified-user to first-match conversion;
-- queue wait time and match success;
-- WebRTC connection success and call duration;
-- the percentage of conversations reaching two minutes;
-- like and dislike outcomes;
-- skip timing;
-- day 1, day 7, and day 30 return rate;
-- friend-request and acceptance rate;
-- reports and blocks per 1,000 encounters;
-- subscription conversion and churn;
-- infrastructure and moderation cost per 1,000 conversations.
+- `complete`: implemented and locally verified; no work remains inside the stated scope.
+- `agent_complete`: code is complete, but human/provider acceptance remains.
+- `in_progress`: active work exists and is not ready for handoff.
+- `blocked`: a required decision, credential, provider, or earlier gate is missing.
+- `not_started`: no implementation has begun.
+- `not_applicable`: a named human approver documented why the item does not apply.
 
-Do not collect message bodies, video frames, audio, exact birth dates, or sensitive profile data in analytics.
+## 2. Locked V1 contract
 
-## 3. Locked V1 product contract
+V1 tests whether verified adults enjoy random conversations enough to return. It is not a progression game yet.
 
 ### Audience and availability
 
-- V1 is for users aged 18 and older.
-- The interface, policies, support, and moderation are English-only.
-- The product may be marketed as a global beta only after country-by-country approval.
-- Production registration, matching, and billing are controlled independently by a server-owned country registry.
-- The registry defaults to disabled. A country is enabled only after legal, payment, safety, support, and infrastructure review.
-- Sanctioned, embargoed, payment-unsupported, or operationally unsupported regions remain disabled.
-- Country matching preferences do not override launch availability.
-
-### Accounts and onboarding
-
-- Accounts are required.
-- Support verified email/password and Google OAuth.
-- Email verification is required before matching, messaging, friendship actions, calls, or billing.
-- Collect date of birth once, encrypt it, and derive adult eligibility on the server.
-- Reject users under 18. Do not reveal the exact eligibility calculation in the error response.
-- Require versioned acceptance of the Terms, Privacy Policy, and Community Guidelines.
-- Explain the no-nudity, no-recording, reporting, blocking, and Maxed Out profile-view rules during onboarding.
+- V1 is 18+ and English-only.
+- Accounts and verified email or verified Google identity are required.
+- Date of birth is collected once, encrypted, and converted to server-owned adult eligibility.
+- Registration, matching, and billing are separate server-controlled country switches.
+- Every country starts disabled. Countries open only after legal, payment, safety, support, and capacity approval.
+- Expansion is country by country. There is no global enable switch.
 
 ### Core conversation loop
 
-1. Register, verify, and complete onboarding.
-2. Choose text or video and set allowed preferences.
-3. Enter authenticated, account-aware matching.
-4. Talk, use the in-call text chat, reveal a safe profile card where allowed, or leave.
+1. Register, verify, accept current policies, and complete onboarding.
+2. Choose text or video and save allowed preferences.
+3. Enter authenticated matching.
+4. Talk, use plain-text in-call chat, optionally reveal a safe card, or leave.
 5. Report or block at any time.
-6. After 120 connected seconds, like or dislike the conversation.
-7. Optionally become friends and use the existing direct messaging and call features.
+6. After 120 server-measured connected seconds, submit one immutable Like or Dislike.
+7. Optionally become friends, then use direct messages and calls.
 8. Return to matching or end the session.
 
-### Text skip rule
+### Timing and identity rules
 
-- In a connected random text conversation, Next is locked for 25 seconds.
-- The server owns the unlock timestamp. Client clock changes and reconnects cannot reset or bypass it.
+- Text Next unlocks after 25 connected seconds. The server owns the timestamp.
 - Leave, Block, Report, and Report and leave are never delayed.
 - Video Next remains immediate.
-- Queue join/leave spam has a separate rate limit.
-
-### Conversation outcomes
-
-- A conversation becomes rateable after 120 server-measured connected seconds.
-- Each participant may submit one immutable `like` or `dislike`.
-- A rating cannot be submitted for a conversation that never connected.
-- The window closes 24 hours after the encounter ends.
-- The other person's response stays hidden until both respond or the window closes.
-- Reports and blocks do not create, delete, or rewrite ratings.
-- V1 stores outcomes and total likes but awards no ParamPoints or XP.
-
-### Profile exposure during random calls
-
-- Free, Lite, and Loaded users begin anonymous.
-- Each may reveal their own safe call card for that encounter. Revealing is one-way; it does not force the other person to reveal.
-- Maxed Out users see the other participant's safe call card when the match connects. They remain anonymous until they reveal themselves.
-- Users must be told about this Maxed Out behavior during onboarding and in privacy settings.
-- The safe card may contain avatar, username, display name, country, language, and interests.
-- It never contains exact birth date, email, restricted bio, online history, device data, reports, sanctions, payment data, or deleted content.
-- Blocking immediately ends the encounter and revokes call-card access.
+- Ratings unlock at 120 connected seconds and close 24 hours after the encounter ends.
+- Free, Lite, and Loaded start anonymous and may reveal their own safe card.
+- Maxed Out automatically sees the other participant's documented safe card after connection.
+- A safe card may contain avatar, username, display name, country, language, interests, and reveal source.
+- It never contains exact birth date, email, bio, device history, moderation data, billing data, or internal records.
 
 ### V1 plans
 
-Prices are monthly USD list prices.
+| Plan      | Monthly USD | Active V1 rights                                                                                                                   |
+| --------- | ----------: | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Free      |          $0 | Text/video matching, country/language/interests preferences, profiles, reports, blocks, friends, direct messages, and direct calls |
+| Lite      |          $3 | Free rights, gender preference, and online-status display                                                                          |
+| Loaded    |          $9 | Lite rights, premium media target, reconnect, profile cosmetics, and supporter badge                                               |
+| Maxed Out |         $19 | Loaded rights, capped queue priority, safe-card override, early-access flag, and direct support route                              |
 
-| Plan      | Price | Active V1 entitlements                                                                                                         |
-| --------- | ----: | ------------------------------------------------------------------------------------------------------------------------------ |
-| Free      |    $0 | Text/video matching, country/language/interests preferences, profiles, reporting, blocking, friends, direct messages and calls |
-| Lite      |    $3 | Free features, gender preference, online-status display                                                                        |
-| Loaded    |    $9 | Lite features, premium media target up to FHD, reconnect previous eligible match, profile frames/backgrounds, supporter badge  |
-| Maxed Out |   $19 | Loaded features, capped queue priority, safe-call-card override, early-access flag, direct support route                       |
+Paid rights never bypass blocks, sanctions, country controls, compatibility, privacy, or safety. Stripe webhook state controls entitlements; browser redirects do not.
 
-Rules:
+ParamPoints, XP, levels, quests, streak rewards, daily plan grants, reputation, and ads are not active V1 benefits. Product copy must call them V2 work.
 
-- Ads do not ship in V1.
-- Daily ParamPoints and XP, quests, levels, and Maxed Out temporary max level are marked "coming in V2" and are not sold as active benefits.
-- Premium quality is a best-effort target. Browser, hardware, network, TURN, and peer conditions may lower received resolution.
-- Paid queue priority has a hard cap. Free users must not starve.
-- Paid features never bypass blocks, sanctions, launch-country rules, compatibility, or safety checks.
-- Reconnect is an offer to the immediately previous eligible match, not a forced connection.
-- Stripe webhooks, not checkout redirects, control entitlements.
+### V1 safety and privacy rules
 
-### V1 safety promise
+- Paramingle prohibits harassment, nudity, sexual behavior, hate, spam, scams, fake-camera abuse, and underage use.
+- Paramingle does not record or store call audio/video.
+- Reporting does not leave the conversation unless the user chooses Report and leave.
+- Blocking ends current contact and prevents future matching, profile access, requests, messages, calls, reveals, and reconnect.
+- Automated detection may create a reviewable signal. It may not issue a permanent sanction by itself.
+- Analytics must not contain message bodies, media, exact birth dates, tokens, private profile fields, or moderation evidence.
 
-- Prohibit harassment, nudity, sexual behavior, hate speech, spam, scams, fake-camera abuse, and underage use.
-- Video and audio are never recorded or stored by Paramingle.
-- Reporting does not end a conversation unless the user chooses Report and leave.
-- Blocking ends the interaction and prevents future matching, profile access, friend requests, messages, calls, reveals, and reconnect.
-- Automated classifiers are risk signals only. They cannot permanently ban an account.
-- Basic anti-bot, spam detection, rate limiting, and moderation operations must work before launch.
+## 3. Architecture that V1 uses and V2 must preserve
 
-## 4. V2 product contract
+Current production shape:
 
-V2 begins after V1 proves the core loop and supplies enough data to tune rewards without encouraging farming.
-
-V2 includes:
-
-- ParamPoints and an immutable transaction ledger;
-- XP, a versioned level curve through level 50, and level-up rewards;
-- an explainable reputation model;
-- daily and weekly quests;
-- streak and invite rewards;
-- daily subscription grants;
-- temporary Maxed Out level presentation without minting permanent XP;
-- an expanded cosmetic catalog;
-- ads after written provider approval;
-- optional rewarded ads if policy permits;
-- progression-aware profiles.
-
-The initial reputation system must not subtract XP every day. Start with reputation-based earning modifiers and recovery tasks. Daily XP decay needs a separate product decision, user-facing explanation, abuse analysis, and appeal policy.
-
-## 5. Current repository baseline
-
-The repository is not an empty prototype. It is an npm-workspaces monorepo using Node.js 22, TypeScript, React/Vite, Fastify, `ws`, Drizzle, PostgreSQL, Redis, and WebRTC.
-
-Implemented boundaries include:
-
-- user and admin React applications;
-- shared UI, configuration, contracts, and database packages;
-- Supabase-oriented authentication and account reconciliation;
-- encrypted birth-date storage and profile/privacy settings;
-- avatar quarantine and processing;
-- authenticated realtime tickets;
-- Redis matching, presence, leases, and signaling;
-- random text/video sessions and encounter retention;
-- blocks, friends, discovery, direct messages, and direct calls;
-- reports, moderation cases, sanctions, appeals, roles, and audit data;
-- Render/Vercel deployment manifests and a maintenance worker.
-
-Missing or incomplete work includes:
-
-- production provider configuration;
-- an 18+ production gate and launch-country controls;
-- V1 conversation ratings;
-- the 25-second text skip lock;
-- matching preference and entitlement enforcement;
-- Stripe catalog, billing, webhooks, and entitlement ledger;
-- paid identity reveal, reconnect, queue priority, and quality policies;
-- privacy export/deletion completion;
-- automated abuse signals;
-- production monitoring, load testing, restore rehearsal, and launch operations.
-
-Verification on July 12, 2026:
-
-- `npm run check` passed.
-- Six migrations validated.
-- Unit, API, UI, contract, and legacy tests passed.
-- Redis was not running; API tests correctly exercised degraded readiness behavior.
-
-Before starting Task 1, re-run the inventory because code may have changed.
-
-## 6. Target architecture and invariants
-
-Keep the current topology:
-
-- `apps/web`: public React client on Vercel;
-- `apps/admin`: separate admin React client on Vercel;
-- `apps/api`: Fastify HTTP, `/ws`, and worker on Render;
-- `packages/contracts`: Zod transport contracts;
-- `packages/database`: Drizzle schema, migrations, repositories, encryption;
-- `packages/ui`: accessible shared components;
-- `packages/config`: validated server/browser configuration;
-- Supabase: Auth, PostgreSQL, and avatar storage;
-- Redis: queues, leases, cooldowns, rate limits, and presence;
-- browser WebRTC with managed TURN fallback;
-- Stripe Checkout and Billing Portal.
+- `apps/web`: public React/Vite client on Vercel.
+- `apps/admin`: separate AAL2-protected admin client on Vercel.
+- `apps/api`: Fastify HTTP, `/ws`, and the maintenance worker on Render.
+- `packages/contracts`: Zod HTTP and realtime contracts.
+- `packages/database`: Drizzle schema, repositories, encryption, and migrations.
+- `packages/config`: validated browser/server configuration.
+- `packages/ui`: accessible shared components.
+- Supabase: Auth, PostgreSQL, avatar storage, and private export storage.
+- Redis: queues, leases, cooldowns, rate limits, and presence.
+- Browser WebRTC with managed TURN fallback.
+- Stripe Checkout, Billing Portal, and signed webhooks.
 
 System invariants:
 
-- Browsers never receive server secrets.
-- PostgreSQL owns durable financial, moderation, rating, and entitlement data.
-- Redis owns expiring realtime state.
-- The server owns age eligibility, connected duration, cooldowns, rating eligibility, matching rights, quality policy, priority, and profile-view rights.
-- Every retryable write has an idempotency key or a unique database constraint.
-- API startup never runs migrations.
-- Logs never contain tokens, exact birth dates, raw Stripe payloads, private message bodies, video frames, or audio.
-- Breaking realtime changes require a protocol version and an upgrade response.
-
-## 7. Public interface and schema work
-
-These names are the default contract. Change one only when the existing code makes it technically invalid, and record the replacement in an ADR.
-
-### Launch control tables
-
-Add `launch_countries`:
-
-- `country_code char(2)` primary key;
-- `registration_enabled boolean`;
-- `matching_enabled boolean`;
-- `billing_enabled boolean`;
-- `reason_code text`;
-- `reviewed_at timestamptz`;
-- `reviewed_by uuid null`;
-- timestamps.
-
-Add `user_country_state`:
-
-- user ID;
-- registration country;
-- last observed country;
-- source and checked timestamp.
-
-Do not store raw IP addresses here.
-
-### Billing and entitlement tables
-
-Add:
-
-- `subscription_plans` with stable keys `free`, `lite`, `loaded`, `maxed_out`, environment-specific Stripe IDs, price, version, and active state;
-- `subscriptions` with user, Stripe customer/subscription IDs, status, current period, cancellation state, and last processed object time;
-- `entitlement_grants` with entitlement key, source, validity, and revocation;
-- `stripe_webhook_events` keyed by Stripe event ID for idempotent processing.
-
-Do not store card data.
-
-### Matching preference tables
-
-Add `matching_preferences` with mode-specific country, language, interests, optional self-described gender, and optional gender preference.
-
-- Gender is optional and private.
-- Include an `everyone` preference.
-- Never infer gender from name, avatar, profile text, or video.
-- Free users may set country, language, and interests.
-- Lite and above may set gender preference.
-
-### Encounter additions
-
-Add authoritative connected timing and rating fields to encounters:
-
-- connected-at;
-- connected duration;
-- rating-eligible-at;
-- rating-window-closes-at.
-
-Add `encounter_identity_reveals` with encounter, viewer, subject, source (`subject_consent` or `maxed_entitlement`), reveal time, and revocation.
-
-Add `conversation_ratings` with encounter, rater, subject, outcome, and submission time. Enforce one row per encounter/rater.
-
-Add `reconnect_requests` with requester, previous encounter, state, expiry, and resolution.
-
-### HTTP endpoints
-
-Add contracts, handlers, authorization, OpenAPI entries, and tests for:
-
-- `GET /v1/launch/availability`
-- `GET /v1/catalog/plans`
-- `GET /v1/me/entitlements`
-- `GET /v1/me/matching-preferences`
-- `PUT /v1/me/matching-preferences`
-- `POST /v1/billing/checkout`
-- `POST /v1/billing/portal`
-- `POST /v1/billing/webhooks/stripe`
-- `POST /v1/encounters/:id/reveal`
-- `GET /v1/encounters/:id/call-card`
-- `POST /v1/encounters/:id/rating`
-- `GET /v1/me/rating-summary`
-- `POST /v1/encounters/:id/reconnect`
-- `POST /v1/reconnect-requests/:id/accept`
-- `POST /v1/privacy/export`
-- `POST /v1/privacy/delete`
-- `POST /v1/privacy/delete/cancel`
-- `GET/PUT /v1/admin/launch-countries`
-- `GET /v1/admin/subscriptions/:userId`
-- `POST /v1/admin/entitlements/grant`
-- `POST /v1/admin/entitlements/revoke`
-- `GET /v1/admin/quality/summary`
-
-### Realtime events
-
-Add compatible, versioned events:
-
-- `session.timer`: connected time, text unlock, and rating eligibility;
-- `session.identity_revealed`: safe card and reveal source;
-- `session.rating_available`;
-- `session.rating_submitted`: acknowledgement without leaking the other rating;
-- `session.entitlements_changed`;
-- `session.reconnect_offered` and `session.reconnect_resolved`;
-- `session.quality_policy`: target dimensions, frame rate, and bitrate.
-
-## 8. Execution order
-
-Tasks are dependency-ordered. An agent may parallelize only tasks that do not touch the same contracts, migrations, or invariants.
-
-### Task 0: establish the live execution ledger
-
-**Agent**
-
-- Inventory every route, page, repository, migration, worker job, and realtime event.
-- Mark each V1 capability implemented, partial, placeholder, absent, or manual.
-- Correct stale progress notes in this file only. Preserve older plans as history.
-- Add the exact next task to the progress ledger.
-
-**Done when**
-
-- A new agent can find the next change without chat history.
-- No completed foundation is scheduled for a rewrite.
-
-### Task 1: assign human owners
-
-**Manual**
-
-Assign named owners for product, engineering release, safety, privacy/legal, billing/tax, customer support, incidents, and data protection. Agents must leave owners `unassigned` until a human provides names.
-
-**Gate:** public registration cannot open with these roles unassigned.
-
-### Task 2: lock launch and policy requirements
-
-**Manual**
-
-- Select the first countries for legal review.
-- Approve prohibited and held countries.
-- Approve Terms, Privacy Policy, Community Guidelines, cookie notice, subscription/refund terms, moderation policy, appeals policy, and retention schedule.
-- Define the legal entity and support contacts shown to users.
-- Approve the Maxed Out safe-card disclosure.
-
-**Agent**
-
-- Version policy documents and acceptance records.
-- Replace public 16+ copy with 18+.
-- Add deny-by-default country controls and neutral unsupported-region UX.
-- Add admin country controls and audit events.
-- Add feature flags for registration, matching, video, billing, reconnect, paid reveal, queue boost, and automated detection.
-
-**Tests**
-
-- Disabled countries cannot register, match, or bill as configured.
-- A matching preference cannot bypass availability.
-- Admin country changes require AAL2 and are audited.
-
-### Task 3: configure local, CI, staging, and production environments
-
-**Manual**
-
-Create organization-owned Supabase, Render, Vercel, TURN, Stripe, SMTP, Turnstile, error-monitoring, uptime-monitoring, analytics, DNS, and support accounts. Enable MFA and least privilege. Add secrets only through provider secret stores.
-
-**Agent**
-
-- Extend `.env.example` and validated config for new services.
-- Reject placeholder credentials in production.
-- Keep preview deployments away from production data and billing.
-- Document every secret's owner, scope, rotation, and destination.
-- Keep server values out of `VITE_*` variables.
-
-Supabase production setup must include RLS review, custom SMTP, Auth rate-limit review, backups, and PITR where the recovery target requires it. See the [Supabase production checklist](https://supabase.com/docs/guides/deployment/going-into-prod).
-
-### Task 4: enforce 18+ onboarding
-
-**Agent**
-
-- Reject invalid, future, and under-18 birth dates.
-- Derive eligibility using server time.
-- Retain encrypted birth date for account lifetime under the approved policy.
-- Prevent birth-date self-service changes after onboarding.
-- Reject existing minor-cohort accounts from every communication capability.
-- Update UI copy and fixtures.
-
-**Tests**
-
-- Exact eighteenth birthday boundaries in UTC.
-- Leap-day birth dates.
-- Replayed onboarding steps.
-- Client timezone and clock manipulation.
-- Minor account attempts across HTTP and WebSocket paths.
-
-### Task 5: finish matching preferences
-
-**Agent**
-
-- Add normalized country, language, interest, gender identity, and gender preference contracts.
-- Apply hard exclusions before preferences: eligibility, sanctions, blocks, country availability, active session, and recent pair.
-- Enforce Lite entitlement for gender preference.
-- Apply a documented relaxation policy as wait time grows. Never relax gender silently.
-- Show users when narrow filters reduce liquidity.
-- Do not create fake users to fill queues.
-
-**Tests**
-
-- Symmetric compatibility.
-- Block and sanction exclusion.
-- Free-tier gender-filter denial.
-- Queue cancellation and stale lease cleanup.
-- Multi-instance Redis atomicity.
-- Free-user fairness under paid priority.
-
-### Task 6: add the text skip cooldown
-
-**Agent**
-
-- Record server-authoritative connected time.
-- Return `skipAllowedAt` and structured `cooldown_active` errors.
-- Add an accessible UI countdown.
-- Keep safety exits immediate.
-- Add queue churn limits separate from the conversation cooldown.
-
-**Tests**
-
-- Just before, exactly at, and after 25 seconds.
-- Reconnect and client-clock manipulation.
-- Video remains immediate.
-- Block and Report and leave remain immediate.
-
-### Task 7: add conversation ratings
-
-**Agent**
-
-- Add timing fields, rating table, repository, API, realtime events, UI, and summary projection.
-- Make writes idempotent.
-- Show rating controls after two connected minutes and on the ended screen.
-- Keep the other outcome private until resolution.
-- Add anomaly metrics for repeated-pair and coordinated rating patterns.
-
-**Tests**
-
-- Duration eligibility and expiry.
-- Participant authorization.
-- Concurrent submissions.
-- Duplicate retries.
-- Reports and blocks do not rewrite ratings.
-- Aggregate total likes remains correct after deletion/anonymization rules.
-
-### Task 8: implement safe-card reveal
-
-**Agent**
-
-- Build one safe-card projection in the account service.
-- Add session-scoped reveal persistence and realtime delivery.
-- Enforce consent for Free, Lite, and Loaded.
-- Enforce active Maxed Out entitlement for the override.
-- Revoke on block, deletion, sanction, expiry, or lost entitlement.
-- Avoid caching a projection without viewer authorization in its cache key.
-
-**Tests**
-
-- Unrevealed free user is inaccessible.
-- Maxed Out sees only approved fields.
-- Expired subscription loses access.
-- A different encounter ID cannot be substituted.
-- Private and internal fields never leak.
-
-### Task 9: implement reconnect
-
-**Agent**
-
-- Track the immediately previous eligible encounter.
-- Require Loaded or Maxed Out.
-- Create a short-lived offer without exposing forbidden identity.
-- Require compatible availability and acceptance from the other user.
-- Fall back to normal matching after decline or expiry.
-
-**Tests**
-
-- Free and Lite denial.
-- Block, sanction, deletion, and country changes invalidate offers.
-- Concurrent reconnect and queue join are atomic.
-- Polling does not leak presence indefinitely.
-
-### Task 10: implement media quality policies
-
-**Agent**
-
-- Define conservative Free/Lite targets and premium Loaded/Maxed targets up to 1920x1080.
-- Use media constraints, sender parameters, and WebRTC statistics where supported.
-- Adapt down for packet loss, latency, CPU pressure, bandwidth, and relay conditions.
-- Provide browser-specific fallbacks.
-- Present measured quality as diagnostics, not a guarantee.
-
-**Tests**
-
-- Permission denial and missing devices.
-- Unsupported sender parameters.
-- Bandwidth degradation and TURN-only calls.
-- Camera switching and network changes.
-- Safari, Firefox, Chromium, iOS, and Android behavior.
-
-### Task 11: build Stripe billing and entitlements
-
-**Manual**
-
-- Verify the business, bank, and tax identity.
-- Disclose the 18+ random-video UGC model and moderation controls to Stripe.
-- Obtain any requested approval.
-- Create sandbox and live products/prices.
-- Configure the Billing Portal, refunds, cancellation, and support authority.
-- Identify and complete tax registrations before collection where required.
-
-Stripe subscriptions change asynchronously. Verified webhooks must provision and revoke access. See [Stripe subscription webhooks](https://docs.stripe.com/billing/subscriptions/webhooks). Stripe Tax can monitor thresholds, but the business remains responsible for registration. See [Stripe tax registrations](https://docs.stripe.com/tax/registering).
-
-**Agent**
-
-- Add plan, subscription, entitlement, and webhook-event migrations.
-- Seed stable internal plan keys separately from Stripe IDs.
-- Verify webhook signatures against the raw body.
-- Store event IDs before processing.
-- Handle subscription created, updated, deleted, invoice paid/failed, disputes, refunds, and checkout completion.
-- Resolve out-of-order events using object timestamps and reconciliation fetches.
-- Add a scheduled reconciliation job.
-- Add authenticated Checkout and Billing Portal endpoints.
-- Never provision from the return URL.
-
-**Tests**
-
-- Signature failure and replay.
-- Out-of-order delivery.
-- Duplicate checkout.
-- Upgrade, downgrade, cancellation, payment failure, grace period, refund, and dispute.
-- Reconciliation repairs a missed event.
-
-### Task 12: centralize entitlement enforcement
-
-**Agent**
-
-Implement one service for:
-
-- `matching.gender_filter`;
-- `presence.online_status`;
-- `media.premium_quality`;
-- `matching.reconnect`;
-- `profile.frames`;
-- `profile.animated_background`;
-- `profile.supporter_badge`;
-- `matching.priority_weight`;
-- `call_card.paid_override`;
-- `features.early_access`;
-- `support.direct`.
-
-Every HTTP and realtime decision must call this boundary. Cache briefly and invalidate on webhook changes. Preserve rights through a paid-through cancellation date. Apply the approved payment-failure grace period. Audit manual grants.
-
-**Tests**
-
-- Browser claims cannot grant features.
-- Active calls and queues refresh after revocation.
-- Priority has a cap and cannot starve free users.
-- Manual grants expire and are audited.
-
-### Task 13: replace the premium placeholder UI
-
-**Agent**
-
-- Fetch the server catalog.
-- Show active V1 and coming V2 benefits separately.
-- Show current plan, renewal, cancellation, past-due state, and portal access.
-- Add processing and provider-unavailable states.
-- Avoid fake urgency and hidden cancellation.
-- Add accessible price and feature comparison.
-
-### Task 14: complete moderation operations
-
-**Manual**
-
-- Approve report taxonomy, sanction matrix, evidence retention, urgent escalation, appeal targets, coverage hours, and staffing.
-- Train moderators before invite traffic.
-
-**Agent**
-
-- Verify harassment, NSFW, spam, hate speech, fake camera, and underage report paths.
-- Confirm Report does not leave and Report and leave does.
-- Confirm Block revokes every contact path.
-- Add queue priority, escalation timers, reason templates, and restricted evidence access.
-- Add immutable audit events for case reads and actions.
-- Require AAL2, exact admin origin, least-privilege roles, session timeout, and reauthentication for high-risk actions.
-
-### Task 15: add anti-bot and spam protection
-
-**Agent**
-
-- Add Turnstile to signup and recovery through Supabase support and to risk-triggered application flows where needed.
-- Validate application tokens server-side with expected hostname and action.
-- Rate-limit signup, profile updates, queue joins, Next, messages, requests, ratings, reports, and reconnect by account and session.
-- Use privacy-preserving network-prefix limits for unauthenticated abuse.
-- Detect high-rate identical messages and queue churn.
-- Use escalating friction rather than unappealable secret bans.
-
-Turnstile tokens are single-use, expire after five minutes, and require server validation. See [Cloudflare Siteverify](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/). Use official test keys in automated tests.
-
-### Task 16: add basic NSFW risk signals
-
-**Manual**
-
-- Approve a model/provider, license, privacy terms, accuracy evaluation, user notice, and enabled countries.
-- Decide whether client-side frame analysis is acceptable.
-
-**Agent**
-
-Default design, subject to approval:
-
-- Run an approved classifier on low-frequency frames in the browser.
-- Never transmit or persist frames.
-- Send bounded scores and model version only.
-- Locally obscure or pause outgoing video after repeated high-confidence signals and show a warning.
-- Make risk data visible to moderators only when tied to a report or repeated abuse.
-- Add a kill switch.
-- Treat fake-camera heuristics the same way: as signals, not proof.
-
-**Tests**
-
-- No frames appear in network traffic or logs.
-- Model failure does not remove reporting or blocking.
-- Feature-disabled behavior.
-- False-positive and appeal path.
-- Performance on low-end devices.
-- Pre-launch evaluation across lighting and skin tones.
-
-### Task 17: complete privacy operations
-
-**Agent**
-
-- Finish session listing, revoke-one, and sign-out-other-sessions.
-- Add authenticated export requests and worker-generated, short-lived downloads.
-- Exclude other users' private data, moderator notes, fraud signals, and secrets.
-- Add deletion pending, recent reauthentication, optional cancellation window, immediate contact disablement, session revocation, profile removal, and policy-based erasure/anonymization.
-- Handle active subscriptions and required billing/safety retention.
-- Make retention jobs idempotent and bounded.
-
-Cleanup must cover random messages and user encounter history after 48 hours, reconnect requests, friend requests, rating windows, abandoned uploads, stale realtime state, security logs, export archives, deletion-pending accounts, report evidence, and expired grants.
-
-### Task 18: add observability and cost controls
-
-**Manual**
-
-Create monitoring projects, alert destinations, escalation contacts, and spending budgets.
-
-**Agent**
-
-- Add structured error reporting with revision/environment tags and tested redaction.
-- Monitor API readiness, WebSockets, queue wait, match success, WebRTC connection success, call duration, early skips, ratings, reports, blocks, TURN use, webhook delay, worker lag, database saturation, and Redis memory.
-- Add global and per-country concurrency ceilings.
-- Add honest beta-full UX.
-- Alert on abnormal TURN, Redis, database, email, storage, and billing usage.
-- Connect every alert to a runbook.
-
-### Task 19: security, accessibility, and browser hardening
-
-**Agent**
-
-Security review must cover:
-
-- authorization and IDOR across profiles, encounters, ratings, messages, reports, calls, billing, exports, and admin;
-- WebSocket origin, ticket replay, stale sessions, and protocol downgrade;
-- Stripe signatures, replay, and event ordering;
-- upload type, size, decompression bombs, and SVG rejection;
-- XSS in profiles, messages, and moderation evidence;
-- SQL injection, SSRF, CORS, CSP, headers, and log redaction;
-- deletion, block, sanction, and subscription race conditions.
-
-Accessibility/browser review must cover keyboard use, screen readers, focus, contrast, reduced motion, responsive layouts, media-permission failure, device switching, network changes, countdown announcements, billing return, and admin dialogs on current Chrome, Edge, Firefox, desktop Safari, iOS Safari, and Android Chrome.
-
-**Manual**
-
-- Commission an independent penetration test before unrestricted public traffic.
-- Publish a security contact and vulnerability disclosure process.
-
-### Task 20: build integration, E2E, and load coverage
-
-**Agent**
-
-- Seed adult accounts for every plan.
-- Use fake Stripe webhook fixtures and Turnstile test keys.
-- Add two-browser text/video matching tests and TURN-forced tests.
-- Test signup, onboarding, preferences, cooldown, reveal, rating, report, block, reconnect, purchase, downgrade, deletion, and admin sanction.
-- Add multi-instance API/Redis integration tests.
-- Build a protocol-aware load harness for sockets, queue churn, matching, chat, skip storms, heartbeats, ratings, webhooks, and cleanup jobs.
-- Measure the safe socket ceiling, match latency, Redis/database limits, reconnect behavior, memory, worker contention, and cost per 1,000 conversations.
-
-**Manual**
-
-Approve a launch ceiling below both the measured infrastructure limit and the staffed moderation limit.
-
-### Task 21: deploy and rehearse operations
-
-**Manual**
-
-- Configure product, API, admin, auth, and support domains.
-- Configure SPF, DKIM, and DMARC.
-- Enter exact callbacks and origins in Supabase, Google, Stripe, Vercel, and Render.
-- Choose recovery point and recovery time targets.
-- Enroll every admin in MFA.
-
-**Agent**
-
-- Require format, lint, typecheck, tests, migration validation, secret scan, and builds in CI.
-- Apply migrations before application deploys.
-- Enforce HTTPS/WSS, exact origins, CSP, and HSTS after domain verification.
-- Rehearse database restore, Redis loss, webhook replay, auth outage, TURN outage, credential rotation, bad migration recovery, moderator compromise, and data exposure response.
-- Document rollback and kill-switch steps.
-
-Release order:
-
-1. Approve the release candidate.
-2. Confirm a restore point.
-3. Apply reviewed migrations.
-4. Deploy API and worker.
-5. Verify liveness, readiness, and protocol compatibility.
-6. Deploy web and admin.
-7. Run production smoke tests.
-8. Enable features and countries gradually.
-9. Watch alerts and product/safety metrics before expansion.
-
-## 9. Required automated scenarios
-
-No V1 feature is done without the relevant cases below.
-
-### Identity and authorization
-
-- unverified, underage, limited, suspended, banned, deletion-pending, and deleted accounts;
-- wrong user and wrong encounter/thread identifiers;
-- expired or replayed auth and realtime tickets;
-- stale entitlements and mid-session revocation;
-- admin without AAL2 or required role.
-
-### Concurrency and retries
-
-- duplicate HTTP submissions;
-- duplicate/out-of-order realtime commands;
-- two devices for one account;
-- concurrent Next, Block, Report, rating, reconnect, and disconnect;
-- webhook duplicates and out-of-order delivery;
-- worker retry after partial completion.
-
-### Failure behavior
-
-- Postgres unavailable;
-- Redis unavailable or flushed;
-- TURN unavailable;
-- Stripe and SMTP timeouts;
-- browser permission denial;
-- offline/reconnect and tab close;
-- unsupported media APIs;
-- feature flag disabled while in use.
-
-### Privacy and safety
-
-- safe-card field leakage;
-- blocked-user cache leakage;
-- log and analytics redaction;
-- export cross-user leakage;
-- retention and deletion races;
-- report spam without blocking urgent reporting;
-- automated-risk false positives.
-
-## 10. Beta gates
-
-### Gate A: internal alpha
-
-Pass when:
-
-- `npm run check` and integration suites pass;
-- two real devices match by text and video;
-- a TURN-forced call works;
-- cooldown, reveal, rating, report, block, and reconnect work;
-- sandbox billing provisions and revokes all plans;
-- an admin sanction revokes an active capability;
-- no production user data is involved.
-
-### Gate B: closed beta
-
-Pass when:
-
-- production infrastructure and backups are configured;
-- approved policies are live;
-- moderators are trained and scheduled;
-- Stripe live approval and applicable tax setup are complete;
-- backup restore succeeds;
-- an independent security review has no open critical or high finding;
-- invite-only operation completes an agreed review period;
-- safety backlog, cost, uptime, and match quality stay within approved limits.
-
-### Gate C: country-limited public beta
-
-Pass when:
-
-- registration is enabled only in approved countries;
-- capacity ceilings and kill switches are active;
-- on-call, support, appeals, billing, and deletion workflows have owners;
-- no severity-one incident is open;
-- queue wait, connection success, report rate, TURN cost, and moderation backlog meet launch thresholds.
-
-### Gate D: global expansion
-
-Global expansion is repeated country enablement, not one configuration switch.
-
-For each country or small group:
-
-1. Complete legal, privacy, payment, and safety review.
-2. Confirm English support is acceptable.
-3. Enable and test in staging.
-4. Enable production registration at a low ceiling.
-5. Watch quality, safety, support, billing, and cost.
-6. Expand, hold, or disable.
-
-## 11. V1 final acceptance checklist
-
-- [ ] Adults can register, verify, onboard, use the product, export data, and delete accounts.
-- [ ] Under-18 users cannot enter any communication flow.
-- [ ] Text and video matching work across different networks and API instances.
-- [ ] TURN fallback is tested in production-like conditions.
-- [ ] Text Next is locked for 25 connected seconds; safety exits are immediate.
-- [ ] Rating is available after 120 connected seconds and cannot be forged or duplicated.
+1. PostgreSQL owns durable money, XP, points, rewards, moderation, ratings, and entitlements.
+2. Redis owns short-lived realtime state. Redis loss must not destroy a financial or progression record.
+3. The server decides eligibility, duration, cooldowns, matching rights, rewards, plan rights, and profile visibility.
+4. Every retryable write has an idempotency key or database uniqueness rule.
+5. Ledgers are append-only. Corrections use reversal rows.
+6. A displayed balance or level must be rebuildable from authoritative transactions.
+7. API startup never runs migrations.
+8. Browsers never receive server secrets or authoritative reward amounts.
+9. Logs do not contain tokens, raw Stripe payloads, exact birth dates, messages, media, SDP, ICE candidates, or private evidence.
+10. Breaking realtime changes require a new protocol version.
+
+## 4. Current V1 position
+
+### Verification baseline
+
+On July 13, 2026:
+
+- `npm run check` passed.
+- All workspaces built.
+- 73 current and legacy unit/API/UI/contract tests passed.
+- 11 migrations validated.
+- Secret scans and built-client secret scans passed.
+- Eight Chromium desktop/mobile E2E cases passed.
+
+The local machine did not have PostgreSQL, Redis, or a working Docker daemon. Service-backed integration tests must run in CI and again in approved staging. This is a launch requirement, not an optional cleanup item.
+
+### V1 task ledger
+
+| Task | Scope                                    | Agent status   | Remaining human or external work                                                        |
+| ---: | ---------------------------------------- | -------------- | --------------------------------------------------------------------------------------- |
+|    0 | Live inventory                           | complete       | Recheck affected boundaries before each release                                         |
+|    1 | Accountable owners                       | blocked        | H1 assigns primary and backup owners                                                    |
+|    2 | Countries and policies                   | agent_complete | H2 legal/country/policy approval                                                        |
+|    3 | Environments and CI                      | agent_complete | H3 creates and secures provider environments                                            |
+|    4 | Adult-only onboarding                    | agent_complete | H4 stages boundary and real-service tests                                               |
+|    5 | Matching preferences                     | agent_complete | H5 stages symmetric filter tests                                                        |
+|    6 | Text cooldown                            | agent_complete | H6 runs Redis and cross-instance validation                                             |
+|    7 | Ratings                                  | agent_complete | H7 approves copy and staging behavior                                                   |
+|    8 | Safe-card reveal                         | agent_complete | H8 approves disclosure and leakage checks                                               |
+|    9 | Reconnect                                | agent_complete | H9 approves lifetime/copy and stages revocation cases                                   |
+|   10 | Media quality                            | agent_complete | H10 selects TURN and tests real devices/networks                                        |
+|   11 | Stripe billing                           | agent_complete | H11 obtains approval, configures IDs/tax, and runs sandbox lifecycle                    |
+|   12 | Entitlements and priority                | agent_complete | H11 approves grace/priority and stages revocation/fairness                              |
+|   13 | Premium UI                               | agent_complete | H11 approves catalog and enables paid rows only after testing                           |
+|   14 | Moderation operations                    | agent_complete | H12 approves policy, staffs, trains, and rehearses                                      |
+|   15 | Anti-bot and spam                        | agent_complete | H13 configures Turnstile and approves thresholds                                        |
+|   16 | Visual NSFW/fake-camera signals          | blocked        | H14 either approves disabled V1 behavior or selects a model for implementation          |
+|   17 | Privacy operations                       | agent_complete | H15 approves retention, export, deletion, and legal-hold treatment                      |
+|   18 | Observability and cost controls          | agent_complete | H16 selects providers, alerts, budgets, and named recipients                            |
+|   19 | Security/accessibility/browser hardening | agent_complete | H17 commissions independent reviews and closes critical/high findings                   |
+|   20 | Integration, E2E, and load               | agent_complete | H18 runs staging load/device/provider work and approves ceilings                        |
+|   21 | Deploy and rehearse                      | agent_complete | H19 configures production, restores backups, rehearses incidents, and runs launch gates |
+
+### Important V1 implementation facts
+
+- Launch countries deny by default and split registration, matching, and billing.
+- DOB is encrypted and write-once.
+- Cooldown, rating eligibility, reveals, reconnect, quality policy, and queue priority are server-authoritative.
+- Blocking revokes random/direct contact, Redis leases, safe-card access, and reconnect paths.
+- Billing uses signed raw-body webhooks, idempotent event storage, reconciliation, and stale-event revocation protection.
+- Paid catalog rows remain inactive until H11.
+- Privacy exports use a separate private bucket; deletion has recent-reauthentication and cancellation handling.
+- Global and country socket ceilings are enforced before ticket issuance and have an honest beta-full UI.
+- Render automatic deploys are off. The protected workflow runs checks, integration/E2E gates, migrations, reviewed-SHA API/worker deployment, exact-revision readiness, client deployment, and smoke checks in order.
+
+### V1 gates
+
+Gate A, internal alpha, requires:
+
+- automated checks and service-backed integration passing;
+- two real devices matching by text and video;
+- forced TURN success;
+- cooldown, reveal, rating, report, block, and reconnect validation;
+- all-plan Stripe sandbox provisioning and revocation;
+- active sanction revocation;
+- no production user data.
+
+Gate B, closed beta, requires:
+
+- production infrastructure and successful restore;
+- approved policies, trained moderators, support, and on-call;
+- Stripe/tax approval;
+- no open critical/high independent-review finding;
+- an invite-only observation period inside approved safety, cost, uptime, and quality limits.
+
+Gate C, first country-limited public beta, requires:
+
+- registration limited to approved countries;
+- active capacity ceilings and kill switches;
+- named owners for on-call, support, appeals, billing, privacy, and moderation;
+- no severity-one incident;
+- queue, connection, report, TURN cost, support, and moderation metrics inside launch thresholds.
+
+Gate D is later country expansion. Each country repeats legal, privacy, payment, tax, safety, staging, low-ceiling production, and observation checks.
+
+### V1 final acceptance checklist
+
+- [ ] Adults can register, verify, onboard, export data, and delete accounts.
+- [ ] Under-18 users cannot enter a communication flow.
+- [ ] Text and video matching work across networks and API instances.
+- [ ] TURN fallback works in production-like conditions.
+- [ ] Text Next stays locked for 25 connected seconds while safety exits remain immediate.
+- [ ] Rating unlocks at 120 connected seconds and cannot be forged, changed, or duplicated.
 - [ ] Blocking revokes every communication, discovery, reveal, and reconnect path.
-- [ ] Reports reach the approved moderation workflow.
+- [ ] Reports reach the approved staffed moderation workflow.
 - [ ] Sanctions revoke active and future capabilities.
-- [ ] Free, Lite, and Loaded stay anonymous until self-reveal.
+- [ ] Free, Lite, and Loaded remain anonymous until self-reveal.
 - [ ] Maxed Out sees only the documented safe card.
-- [ ] All four plans purchase, renew, upgrade, downgrade, fail, cancel, refund, and revoke correctly.
-- [ ] Free users remain matchable under paid queue priority.
+- [ ] All plan lifecycle and failure paths provision and revoke correctly.
+- [ ] Free users remain matchable under paid priority.
 - [ ] Premium media degrades safely.
-- [ ] Retention, exports, deletion, backups, and restore work.
-- [ ] Monitoring reaches a named human.
-- [ ] No critical or high security defect is open.
-- [ ] Legal, safety, business, and engineering owners approve launch.
-- [ ] Capacity is below infrastructure and moderation ceilings.
-
-## 12. V2 execution outline
-
-### Economy and XP
-
-Add immutable `parampoint_transactions`, `xp_transactions`, `reputation_events`, and a rebuildable progression summary. Every row needs source type, source ID, amount, idempotency key, occurrence time, and reversal reference.
-
-Store a versioned level curve through level 50. Do not hard-code repeated multiplication in the UI. Maxed Out's temporary max-level presentation must not mint XP; after cancellation, show the earned level.
-
-### Reputation
-
-Use eligible ratings, confirmed reports, overturned reports, blocks, account age, and collusion detection. Require minimum sample sizes, rehabilitation, anti-brigading, broad user-facing explanations, and appeals. Do not infer protected characteristics.
-
-### Quests
-
-Add versioned quest definitions and assignments with reset period, objective, target, reward, eligibility, progress, claim state, and expiry. Count server-confirmed events only. Require minimum conversation duration and distinct counterpart rules to limit farming.
-
-### Subscription grants
-
-Add one idempotent grant per user and period. Document timezone and missed-day behavior. Reconcile subscription changes. Do not create pay-to-harass advantages.
-
-### Ads
+- [ ] Retention, export, deletion, backup, and restore work.
+- [ ] Monitoring reaches a named person.
+- [ ] No critical or high security defect remains open.
+- [ ] Legal, safety, business, product, and engineering owners approve launch.
+- [ ] Production capacity stays below infrastructure and staffed safety/support ceilings.
+
+The human sequence for completing these items is in `human-v1.md`.
+
+## 5. Finish V1 before starting V2
+
+V1 and V2 will be developed one after the other. There is no parallel V2 lane, no `v2-development` branch, and no later reintegration task.
+
+### Work sequence from now
+
+1. Staff complete `human-v1.md` in order.
+2. Codex agents fix every defect found during that work in the current codebase.
+3. Staff retest each fix and rerun any affected gate.
+4. The team completes Gates A, B, and C and the V1 final acceptance checklist.
+5. The named owners record V1 approval and the first country-limited public-beta release date.
+6. The team observes the release for the period chosen in H1. Any failed threshold returns the work to step 2.
+7. When the V1 completion gate below passes, commit and tag the accepted V1 baseline.
+8. Start V2 task V2-N0 on `main` from that baseline.
+
+### V1 completion gate
+
+V2 may start only when every statement below is true:
+
+- H1-H19 are `complete` or formally approved `not_applicable` where the runbook allows it.
+- Gates A, B, and C have passed.
+- Every V1 final-acceptance checkbox in section 4 is checked.
+- Every defect found during human testing has been fixed and retested.
+- No severity-one incident or critical/high security issue is open.
+- The country-limited beta has completed its approved observation period inside the written safety, quality, support, reliability, billing, and cost limits.
+- Product, safety, legal/privacy, billing, and engineering have recorded dated approval.
+- The accepted source revision is committed, tagged, reproducible, and deployed through the protected release workflow.
+
+### Main-codebase rule
+
+After the completion gate passes, V2 is implemented directly in the normal codebase:
+
+1. Update local `main` from the accepted remote `main`.
+2. Confirm the V1 tag and required checks are present.
+3. Implement one numbered V2 task at a time.
+4. Add migrations, tests, documentation, flags, and rollback controls required by that task.
+5. Run the focused tests and the full repository check before marking the task complete.
+6. Commit the reviewed task normally. Continue to the next task only after its dependencies pass.
+
+There is no V2 branch-setup or reintegration task. Use the same review and commit workflow used for V1, with `main` as the single continuing product history. Agents must never merge, deploy, enable a live feature, or change a provider account unless the assigned task and human approval explicitly authorize it.
+
+### Current Codex handoff: V1 only
+
+Until the V1 completion gate passes, Codex agents must work only on V1 validation findings and V1 release support:
+
+1. Read the staff finding and identify the affected H-task, gate, acceptance item, and code boundary.
+2. Reproduce the failure with the smallest reliable test. Inspect logs without copying secrets or private user data.
+3. Fix the root cause without weakening age, safety, privacy, billing, authorization, launch-country, or capacity controls.
+4. Add or update an automated regression test.
+5. Run focused checks, then `npm run check`. Run service-backed integration, E2E, load, or real-device checks when the defect touches those boundaries.
+6. Give staff exact retest steps and expected results.
+7. Update the V1 progress ledger and `human-v1.md` only when the finding changes the remaining human work.
+8. Leave human approval boxes unchecked. Staff or the named owner records those results after retesting.
+
+If a request asks an agent to start V2 before the completion gate, the agent must stop and report which V1 conditions are still open.
+
+## 6. Locked V2 boundaries
+
+V2 adds progression and a broader cosmetic economy after V1 proves the conversation loop.
+
+Planned V2 capabilities:
+
+- ParamPoints with an immutable transaction ledger;
+- XP with a versioned level curve through level 50;
+- explainable reputation and recovery work;
+- daily/weekly quests and streaks;
+- carefully controlled invite rewards;
+- daily subscription grants;
+- temporary Maxed Out max-level presentation without permanent XP minting;
+- expanded cosmetics, ownership, loadouts, and spending;
+- ads only after written provider approval and a separate rollout gate.
 
-Ads remain blocked until an ad provider gives written approval for an 18+ random-video UGC service. Google AdSense is not a default option: its policy prohibits ads on screens where private messages, live chats, video chats, or private chatrooms are the primary focus, and it prohibits preset-time pre-roll gates. See [Google ad placement policies](https://support.google.com/adsense/answer/1346295).
-
-If approved later:
+Non-negotiable rules:
 
-- place ads only on provider-approved non-conversation surfaces;
-- never load ad code while private chat or live media is visible;
-- never send profile, message, match, or sensitive data to the provider;
-- apply consent and regional opt-out;
-- frequency-cap on the server;
-- disable ads for Loaded/Maxed Out and reduce them for Lite;
-- provide a provider kill switch;
-- keep rewarded ads clearly voluntary.
+1. V1 likes/dislikes do not retroactively mint live rewards without an approved replay policy.
+2. Reward inputs come from server-confirmed events, never client claims.
+3. One source event produces at most one reward transaction.
+4. Reversals reference original transactions. Rows are never edited to hide a correction.
+5. Farming controls use minimum duration, distinct counterpart, daily caps, and collusion checks.
+6. Paid plans may add cosmetics and grants but may not buy harassment power, moderation priority, safety bypasses, or forced contact.
+7. Reputation never uses inferred protected characteristics.
+8. Reputation starts as a shadow score. It does not automatically ban or publicly shame users.
+9. Start with earning modifiers and recovery tasks. Daily XP decay is out of scope until a later explicit decision.
+10. Ads are last. They never load on matching, text/video/direct calls, messages, reporting, blocking, onboarding policy, billing interruption, or deletion surfaces.
+
+### V2 dependency map
+
+```text
+V1 completion gate
+└── V2-N0 start from accepted main
+    ├── V2-N1 rollout controls ────────────────────────────────┐
+    ├── V2-N2 immutable ledgers ── V2-N3 ledger service ──────┼── V2-N10 diagnostics/tests
+    │                              ├── V2-N4 level curve       │
+    │                              ├── V2-N7 quests/streaks ───┤
+    │                              └── V2-N8 plan grants ──────┤
+    ├── V2-N5 progression events ── V2-N6 reputation shadow ──┤
+    │                              └── V2-N7 quests/streaks ───┤
+    └── V2-N9 cosmetic ownership ──────────────────────────────┘
 
-### V2 rollout
+V2-N1 through V2-N10 complete
+└── V2-P0 foundation acceptance
+    └── V2-P1 real shadow events
+        └── V2-P2 economy approval
+            └── V2-P3 live points/XP/levels
+                ├── V2-P4 quests/streaks
+                ├── V2-P5 subscription grants
+                ├── V2-P7 cosmetic spending
+                └── V2-P8 invite rewards
 
-Run the economy in shadow mode, analyze inflation and abuse, then enable internal progression, a small quest cohort, plan grants, and cosmetics. Add ads last. Compare conversation duration, ratings, safety, and retention against a control group. Roll back mechanics that worsen conversation quality or abuse.
+V2-N6 shadow evidence + policy/appeal approval ── V2-P6 reputation effects
+Written provider + legal/privacy approval ─────── V2-P9 optional ads
+Approved P3-P9 feature set ────────────────────── V2-P10 V2 acceptance
+```
 
-## 13. Manual work register
+## 7. V2 foundation tasks after V1 completion
 
-Codex agents cannot complete these actions without a human:
+Do not start this section before the V1 completion gate in section 5 passes. Work through these tasks in the normal codebase, starting from accepted `main`. New behavior defaults off and uses synthetic data unless a task says otherwise.
 
-- form and verify the business entity;
-- pay providers or accept contracts;
-- pass identity, bank, domain, OAuth, Stripe, and tax verification;
-- supply production secrets securely;
-- approve legal and policy text;
-- decide lawful launch countries;
-- hire, train, and schedule moderators and support staff;
-- sign DPAs and vendor agreements;
-- choose sanction, appeal, and refund authority;
-- enroll physical/admin MFA factors;
-- commission independent security/legal review;
-- respond to incidents, disputes, legal requests, users, and appeals;
-- approve launch.
+### V2-N0: start V2 from the accepted V1 baseline
 
-For every manual step, the responsible agent must document the dashboard URL, exact fields, secret classification, verification, revocation/rollback, owner, and completion status. Never ask a human to paste a secret into chat or commit it.
+Goal: begin V2 from the exact V1 revision that passed human acceptance.
 
-## 14. Defaults and assumptions
+Steps:
 
-- The current TypeScript architecture remains the production foundation.
-- Legacy JavaScript stays as a behavior reference only.
-- V1 is 18+ and English-only.
-- Global access expands country by country.
-- Four monthly USD plans ship in V1.
-- Annual plans, trials, coupons, gifting, and lifetime plans are deferred.
-- Ads, ParamPoints, XP, levels, reputation mechanics, and quests are V2.
-- Likes and dislikes ship in V1 without rewards.
-- Country, language, and interests are free filters; gender preference is Lite and above.
-- Maxed Out sees a disclosed safe card, not an unrestricted private profile.
-- No call recording or hidden screenshot capture.
-- Automated detection creates reviewable risk signals, not permanent automatic sanctions.
-- Existing direct friends, messages, and calls remain in V1 because they are already implemented.
-- Managed TURN remains the production default. A vendor must be chosen after regional testing and cost modeling.
-- Every production provider account is organization-owned.
-- A missing legal approval, provider approval, moderator capacity, restore test, or critical security fix blocks public launch.
+1. Confirm the V1 completion gate in section 5 is signed and dated.
+2. Confirm the accepted revision is merged into remote `main` and has an immutable V1 release tag.
+3. Pull the accepted `main` into a clean working tree.
+4. Run `npm run check`, `npm run build`, and `npm run test:e2e`.
+5. Run the PostgreSQL/Redis integration suite in CI or an approved service-backed environment.
+6. Confirm production is running the recorded V1 revision and the release evidence is stored.
+7. Record the V1 tag and starting SHA in the progress table.
+8. Mark V2-N0 complete. Start V2-N1 and V2-N2 only after this point.
 
-## 15. Progress ledger
+Verify:
 
-Update this table after every completed task. Keep evidence concise and link repository files where useful.
+- Local and remote `main` point to the accepted V1 history.
+- The V1 tag resolves to the recorded acceptance SHA.
+- Clean-checkout automated and service-backed tests pass.
+- No V2 migration, flag, worker, API, or UI has been added before this task.
 
-| Task                      | Status      | Owner/agent | Evidence                                                  | Blocker or exact next action                            |
-| ------------------------- | ----------- | ----------- | --------------------------------------------------------- | ------------------------------------------------------- |
-| 0. Live inventory         | complete    | Codex       | July 12 inventory below                                   | Re-audit affected boundaries at the start of each task  |
-| 1. Human owners           | blocked     | unassigned  | Required roles listed below                               | Humans assign accountable owners                        |
-| 2. Launch and policies    | in_progress | Codex       | Run 2 country controls and policy gates                   | Humans approve countries and final policy documents     |
-| 3. Environments           | in_progress | Codex       | Run 3 CI, validation, setup runbook                       | Humans create/configure production provider accounts    |
-| 4. 18+ onboarding         | complete    | Codex       | Run 2 onboarding, contact guards, tests                   | Exercise database integration when services are running |
-| 5. Matching preferences   | complete    | Codex       | Run 3 persistence, API, Redis, UI, tests                  | Exercise integration suite through CI or local services |
-| 6. Text cooldown          | complete    | Codex       | Realtime lease, contracts, API, UI, tests                 | Exercise Redis integration when Docker is running       |
-| 7. Ratings                | in_progress | Codex       | Run 4 migration, API/realtime/UI, tests                   | Human copy approval and staging integration validation  |
-| 8. Safe-card reveal       | in_progress | Codex       | Run 4 scoped projection/revocation/UI                     | Human disclosure approval and staging validation        |
-| 9. Reconnect              | in_progress | Codex       | Run 4 entitlement/offer/atomic accept flow                | Human lifetime/copy approval and staging validation     |
-| 10. Media quality         | in_progress | Codex       | Run 5 server policy/adaptation/browser fallbacks          | H10 selects TURN and validates targets in staging       |
-| 11. Stripe billing        | in_progress | Codex       | Run 5 migration/webhooks/Checkout/Portal/reconciliation   | H11 approval, IDs, tax decisions, sandbox/live tests    |
-| 12. Entitlements          | in_progress | Codex       | Run 5 centralized grants/plan rights/audit/fair priority  | H11 approves grace and staging revocation tests         |
-| 13. Premium UI            | in_progress | Codex       | Run 6 server catalog/status/comparison/Portal UX          | H11 catalog approval and real Stripe staging validation |
-| 14. Moderation operations | blocked     | Codex       | Run 6 SLA queue/evidence/templates/sanction operations    | H12 policy approval, MFA choice, staffing, training     |
-| 15. Anti-bot/spam         | in_progress | Codex       | Run 6 Turnstile validation/scoped limits/repeat detection | H13 widgets, thresholds, friction and staging approval  |
-| 16. NSFW signals          | blocked     | unassigned  | None                                                      | Manual model/privacy approval                           |
-| 17. Privacy operations    | in_progress | Codex       | Run 7 privacy request workflow, worker, session controls  | H15 approves retention, delivery, deletion handling     |
-| 18. Observability/cost    | in_progress | Codex       | Run 7 redacted structured telemetry boundary and runbook  | H16 selects providers, budgets, ceilings, and alerts    |
-| 19. Hardening             | in_progress | Codex       | Run 7 HTTP hardening headers and regression coverage      | H17 independent security/accessibility review           |
-| 20. E2E/load              | not_started | unassigned  | Basic Playwright/integration config                       | Expand throughout Tasks 4-19                            |
-| 21. Deploy/rehearse       | not_started | unassigned  | Vercel/Render manifests exist                             | Requires staging providers and feature completion       |
+Done when: the accepted V1 release is reproducible and `main` is ready for the first V2 change.
 
-### Current handoff
+### V2-N1: define disabled rollout and shadow-mode controls
 
-Tasks 0, 4, 5, and 6 are complete. Tasks 2-3 and 7-13 have complete agent implementations but remain `in_progress` on their recorded human approvals/provider staging work. Task 14's agent work is complete but the task remains blocked on H12 policy approval and staffed moderation operations. Task 15's agent work is complete and remains `in_progress` on H13 Turnstile configuration, threshold approval, and real-service validation. Paid plans remain disabled in the seeded catalog, and the UI labels them unavailable, until H11 is recorded. Task 16 remains blocked on H14 model/privacy approval. Tasks 17-19 now have their initial agent implementation, but remain `in_progress` on H15-H17 approval, provider, staging, and independent-review dependencies. The exact next agent task is Task 20, integration, E2E, and load coverage.
+Goal: give every V2 subsystem a server-owned off switch before it exists.
 
-## 16. Progress updates
+Steps:
 
-### Run 7: privacy operations, observability baseline, and browser hardening
+1. Define stable flag keys for economy shadowing, live economy, reputation shadowing, quests, subscription grants, cosmetics, invite rewards, and ads.
+2. Add an additive `feature_flags` table with environment, key, enabled state, rollout percentage, optional country/cohort constraints, version, reason, and timestamps.
+3. Add an append-only flag-change audit table.
+4. Build one server service that resolves flags. Do not let browsers decide eligibility.
+5. Default every V2 flag to disabled when a row is missing or malformed.
+6. Add a short cache with explicit invalidation. A stale cache may delay enablement but must not delay a kill switch beyond the approved bound.
+7. Add AAL2 admin read-only diagnostics. Write controls may exist only if they create an audit row and fail closed.
+8. Add environment safety: ads and live reward minting cannot turn on in production without separate prerequisite records.
 
-Date: July 13, 2026
-Status: agent implementation complete; human launch dependencies remain
+Verify:
 
-#### Tasks 17-19 implementation
+- Missing database and Redis/cache states resolve to disabled.
+- A browser cannot forge a flag.
+- Country, plan, account, or percentage rollout is deterministic for a user.
+- Every change records actor, old state, new state, reason, and time.
+- Kill-switch tests disable each subsystem.
 
-- Added migration `0011_privacy_operations.sql`, durable export/deletion request state, authenticated export requests and short-lived signed downloads, a bounded idempotent worker pass, deletion cancellation, recent-reauthentication checks, active-subscription handling, immediate account contact disablement, session revocation, and policy-placeholder anonymization. Export payloads are deliberately limited to the requester’s account/profile/session/encounter metadata; they exclude other-user private data, moderation material, fraud signals, secrets, message bodies, and media.
-- Completed the session controls with revoke-one and sign-out-other-sessions routes plus Settings UI. Settings also provides export/deletion request controls. A deletion revokes every local/realtime session and removes queues/live contact before its cancellation window expires.
-- Added a provider-neutral observability boundary with environment/revision tags, recursive sensitive-field redaction tests, safe counter snapshots behind the AAL2 admin boundary, request outcome counters, structured application-error logging, and an alert-to-runbook map in `docs/operations/observability-runbook.md`. Provider projects, exports, budgets, alert routing, and capacity ceilings remain deliberately unconfigured pending H16 and Task 20 evidence.
-- Applied API security headers (CSP, frame denial, MIME sniffing prevention, permissions policy, referrer policy, and cross-origin isolation), preserved exact HTTP/WebSocket origin handling and single-use ticket behavior, and added regression coverage for headers and log redaction. Existing typed contracts, parameterized Drizzle access, raster-only avatar processing, SVG rejection, raw-body Stripe verification, and admin AAL2 guards remain the reviewed boundaries.
+Done when: V2 code can be present without becoming user-visible or minting value.
 
-Files changed: `packages/database/src/schema.ts`, `packages/database/migrations/0011_privacy_operations.sql`, `packages/database/migrations/meta/_journal.json`, `packages/contracts/src/index.ts`, `apps/api/src/privacy-service.ts`, `apps/api/src/observability.ts`, `apps/api/src/account-service.ts`, `apps/api/src/app.ts`, `apps/api/src/worker.ts`, `apps/api/src/app.test.ts`, `apps/api/src/observability.test.ts`, `apps/web/src/pages.tsx`, `docs/operations/observability-runbook.md`, and this plan.
+### V2-N2: add immutable ParamPoint and XP schemas
 
-Verification: contracts and database builds, API typecheck, migration validation (11 migrations), API tests (19), web tests (10), API lint, and format checks were run. Redis was unavailable, so the API correctly reported degraded readiness and real Redis/PostgreSQL/browser/provider validation remains required.
+Goal: create durable ledgers before reward rules are written.
 
-Remaining risks: H15 must approve the retention schedule, export delivery/identity proof, cancellation window, subscription/legal-hold treatment, and anonymization rules before public use; the current seven-day cancellation and 30-day retention defaults are placeholders. H16 must select monitoring/analytics/paging providers, configure actual alerts/budgets and approve ceilings after Task 20 load evidence. H17 must obtain independent penetration and manual accessibility review; current automated tests cannot certify cross-browser media/device behavior or a complete security assessment.
+Steps:
 
-Exact next agent task: Task 20, build integration, E2E, and load coverage. Task 16 remains blocked until H14 approves the model, license, privacy design, user notice, and enabled countries.
+1. Add a migration for `parampoint_transactions` and `xp_transactions`.
+2. Give each row user ID, signed amount, source type, source ID, idempotency key, occurrence time, creation time, rule version, and optional reversal reference.
+3. Use integer units. Do not use floating point for balances.
+4. Add uniqueness for `(ledger, idempotency_key)` and the approved source identity.
+5. Add checks that amount is non-zero and a reversal cannot reference itself.
+6. Require reversal rows to belong to the same user and ledger as the original.
+7. Add rebuildable `progression_summaries` for cached point balance, lifetime XP, level projection, version, and rebuild time.
+8. Do not store an authoritative mutable balance on the user/profile row.
+9. Add indexes for user timeline, source lookup, reversal lookup, and bounded rebuild jobs.
+10. Document retention: financial-like reward ledgers are not deleted as casual analytics; deletion/anonymization policy needs H15/V2 legal approval before live use.
 
-### Run 6: premium UI, moderation operations, and anti-abuse controls
+Verify:
 
-Date: July 13, 2026
-Status: agent implementation complete; manual launch dependencies remain
+- Duplicate retries create one row.
+- Concurrent different events both apply.
+- Update/delete paths are absent from the application repository.
+- Invalid amount and cross-user reversal fail.
+- Rebuilding a summary from transactions returns the same result repeatedly.
 
-#### Tasks 13-15 implementation
+Done when: additive migrations and database integration tests prove an append-only, replayable ledger.
 
-- Replaced the premium placeholder with a server-catalog-driven comparison page. It separates active V1 benefits from explicitly non-active V2 benefits; displays the current plan, provider status, renewal/cancellation date, processing state, Portal access, and honest unavailable states; and permits Checkout only when the server catalog marks a paid row purchasable.
-- Changed the public catalog projection to return all stable plan rows with a server-derived `purchasable` flag. Seeded paid rows remain inactive and cannot start Checkout before H11.
-- Ordered moderation work by urgent/high/standard priority and oldest-first within priority, added priority-specific escalation deadlines and overdue state, exposed provisional reason templates, included evidence expiry metadata, and enabled reason-gated sanction actions in the admin client. Existing AAL2, exact-origin, role, recent-reauthentication, minimum-evidence, append-only audit, and reviewer-separation controls remain enforced.
-- Added Cloudflare Turnstile configuration and a server Siteverify boundary that checks success, expected action, exact allowed hostname, provider failure, and privacy-preserving hashed network-prefix attempt limits. Signup and password recovery now pass Turnstile tokens through Supabase's supported captcha boundary.
-- Added account-and-route mutation limiting across guarded HTTP writes, dedicated queue/message/report limits, and normalized-content hashing to detect high-rate identical direct and random-chat messages without retaining message text in Redis keys. Existing queue churn limiting remains separate from the text Next cooldown.
+### V2-N3: build the ledger service and reversal engine
 
-Files changed: `apps/web/src/app.tsx`, `apps/web/src/pages.tsx`, `apps/web/src/app.test.tsx`, `apps/admin/src/pages.tsx`, `apps/admin/src/app.test.tsx`, `apps/api/src/app.ts`, `apps/api/src/realtime.ts`, `apps/api/src/abuse-service.ts`, `apps/api/src/abuse-service.test.ts`, `packages/database/src/entitlements.ts`, `packages/database/src/moderation.ts`, `packages/config/src/index.ts`, `.env.example`, and this plan.
+Goal: provide one safe server API for all future rewards.
 
-Verification: `npm run check` passed on July 13, 2026: formatting, lint, workspace type checking, 65 current and legacy unit/UI/API tests, 10 migration validations, and the secret scan passed. Redis was not running, so API readiness correctly returned degraded status; real PostgreSQL/Redis, Stripe, Turnstile, and browser staging validation remains in H11-H13.
+Depends on: V2-N2.
 
-Remaining risks: Redis and PostgreSQL integration services were unavailable during the focused unit run; Turnstile and Stripe require real staging credentials and dashboards; moderation thresholds, taxonomy, sanction matrix, escalation targets, retention, and staffing are provisional until H11-H13 are approved. Generic guarded-write limits are conservative defaults and must be tuned from staging/load evidence without weakening safety exits.
+Steps:
 
-Exact next agent task: Task 17, complete privacy operations. Task 16 must not start until H14 approves the model, license, privacy design, user notice, and enabled countries.
+1. Create typed reward source and rule-version contracts.
+2. Implement `applyTransaction` inside a database transaction.
+3. Accept a server-created source record, not a client-supplied amount.
+4. Return the existing transaction on an idempotent retry.
+5. Implement `reverseTransaction` as one new negative/positive compensating row, depending on the original.
+6. Prevent double reversal with a unique constraint.
+7. Rebuild and compare summaries in a bounded worker job.
+8. Record safe mismatch diagnostics without usernames, message content, or private event payloads.
+9. Add a dry-run repair command that reports intended changes but writes nothing.
+10. Keep HTTP reward-minting endpoints out of scope.
 
-### Run 1: live inventory, ownership gate, and text cooldown
+Verify:
 
-Date: July 12, 2026  
-Status: complete, with one unavailable integration check recorded below
+- Retry, race, reversal race, worker retry, and stale-summary tests.
+- Property tests over mixed grants/reversals keep the rebuilt total deterministic.
+- A malformed or unsupported source type grants nothing.
+- Ledger errors cannot partially update the summary.
 
-#### Task 0 inventory result
-
-| Area                               | State found                                   | Evidence and remaining gap                                                                                                                                                        |
-| ---------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Workspace and quality foundation   | implemented                                   | npm workspaces, strict TypeScript, ESLint, Prettier, Vitest, Playwright, migration and secret checks                                                                              |
-| Authentication and accounts        | implemented, production configuration missing | Supabase token verification, account reconciliation, verified-email capability gates, sessions, encrypted birth date                                                              |
-| 18+ launch rule                    | partial                                       | schema and queues still support `minor_16_17`; production onboarding currently derives cohorts instead of rejecting every under-18 user                                           |
-| Profiles and avatars               | implemented                                   | profile privacy projection, visibility controls, upload quarantine and raster processing exist                                                                                    |
-| Launch-country controls            | absent                                        | no deny-by-default country registry or registration/matching/billing switches                                                                                                     |
-| Random matching                    | implemented core, preferences absent          | authenticated Redis cohort/mode queue, blocks, recent-pair exclusion, leases, and signaling exist; country/language/interests/gender are not applied by the matcher               |
-| Random text/video UI               | implemented core                              | media acquisition, WebRTC offer/answer/ICE, text side channel, Next, Leave, Report, and Block surfaces exist                                                                      |
-| Text Next cooldown                 | completed in this run                         | server-authoritative connected time, 25-second enforcement, accessible countdown, structured error, and extended connected lease                                                  |
-| Encounter retention and blocks     | implemented                                   | encounters/messages, 48-hour cleanup, history hiding, and cross-domain block enforcement exist                                                                                    |
-| Conversation ratings               | absent                                        | no rating table, contracts, repository, API, realtime events, summary, or UI                                                                                                      |
-| Friends and presence               | implemented                                   | requests, friendships, mute, discovery, counts, privacy-aware presence, and UI exist                                                                                              |
-| Direct messages and calls          | implemented                                   | persistent threads/messages/read state and direct voice/video signaling exist                                                                                                     |
-| Reports and moderation             | implemented core, operations blocked          | report intake, cases, roles, AAL2 admin guard, sanctions, appeals, enforcement, and audit tables/routes/UI exist; approved taxonomy, staffing, and retention policy remain manual |
-| Billing and entitlements           | absent                                        | Stripe config placeholders and a premium placeholder page exist; catalog, persistence, webhook processing, checkout, portal, and enforcement do not                               |
-| Safe-card reveal and reconnect     | absent                                        | profile projection and encounter history are useful foundations, but no session reveal or paid reconnect contracts exist                                                          |
-| Premium media policy               | partial                                       | WebRTC and TURN credential boundaries exist; tier-aware capture/sender/adaptation policy does not                                                                                 |
-| Anti-bot and spam                  | partial                                       | generic Redis rate-limit primitive and moderation restriction checks exist; Turnstile and endpoint-specific limits are missing                                                    |
-| Automated NSFW/fake-camera signals | absent                                        | requires manual model, privacy, and policy approval before implementation                                                                                                         |
-| Privacy operations                 | partial                                       | session listing/revocation exists; export and full deletion orchestration are absent                                                                                              |
-| Observability                      | partial                                       | live/ready health and structured Fastify logs exist; redaction tests, product/realtime metrics, alerts, budgets, and runbooks are missing                                         |
-| Deployment                         | foundation only                               | Vercel/Render manifests and deployment runbook exist; no production provider configuration or rehearsed release is recorded                                                       |
-| E2E and load coverage              | partial                                       | shell Playwright configuration and integration tests exist; real two-browser WebRTC, billing, safety, multi-instance, and load suites remain                                      |
+Done when: synthetic callers can apply and reverse rewards exactly once, with no public route and no live flag.
 
-#### Task 1 ownership gate
-
-The following owners are still unassigned and block public registration: product approval, engineering release, safety/moderation, privacy/legal, billing/tax, customer support, incident command, and data protection. This is a manual input, not unfinished agent implementation.
+### V2-N4: create the versioned level-curve engine
 
-#### Task 6 implementation record
+Goal: calculate levels without hard-coded client math.
 
-Changed boundaries:
+Depends on: V2-N2 and V2-N3.
 
-- `packages/contracts/src/index.ts`: added `cooldown_active`, error details, and authoritative connected/unlock timestamps.
-- `apps/api/src/realtime.ts`: connected acknowledgement is atomic, keeps its first timestamp, and extends match/active leases to six hours instead of allowing the initial 20-second negotiation lease to expire mid-conversation.
-- `apps/api/src/app.ts`: rejects early text Next commands without ending the match; Leave remains independent.
-- `apps/web/src/pages.tsx`: disables Next during the server-provided window and announces the remaining time while keeping Leave, Report, and Block available.
-- `apps/api/src/realtime.test.ts`: boundary and fail-closed unit tests.
-- `packages/contracts/src/index.test.ts`: connected timing and cooldown error contract tests.
-- `tests/integration/realtime.test.ts`: atomic connected timestamp and lease-extension coverage.
+Steps:
 
-Verification:
-
-- full `npm run check`: passed after the implementation and progress update;
-- shared contracts build: passed;
-- workspace typecheck: passed;
-- API tests: 9 passed;
-- web tests: 7 passed;
-- contract tests: 8 passed after the final contract case was added;
-- Redis integration execution: not run because the Docker daemon was unavailable; the test is committed and must be run with `npm run test:integration -- --run tests/integration/realtime.test.ts` once Redis is available.
-
-Run 1 originally recommended Task 7 next. That handoff was superseded by the user's instruction to return to numbered Tasks 2 and 4; use the Current handoff above.
-
-### Run 2: launch-country controls and adult-only beta
-
-Date: July 13, 2026
-Status: agent implementation complete; Task 2 remains manually gated
-
-#### Task 2 implementation record
-
-- Added migration `0007_launch_countries.sql` with deny-by-default `launch_countries` and private `user_country_state` tables.
-- Added a repository for normalized ISO country codes, availability checks, user observations, separate registration/matching/billing switches, and audited admin updates.
-- Added `GET /v1/launch/availability` and AAL2-protected admin list/update routes.
-- Added versioned Privacy Policy acceptance beside Terms and Community Guidelines. The client reads all active versions from `GET /v1/policies/current`; activation requires all three records.
-- Added an admin Launch countries screen. It treats each capability as a separate switch and requires an audit purpose.
-- Onboarding requires an enabled registration country. Realtime tickets and both HTTP/WebSocket matchmaking paths require an enabled matching country.
-- Production country resolution uses the configured trusted edge header. Missing or malformed production values become `ZZ` and are denied. Local development uses a separate header and fallback country.
-- Added neutral public landing-page copy when registration is unavailable.
-- Added deployment rules requiring the edge to overwrite the country header and the origin hostname to remain unsupported for direct clients.
-- Repaired the migration journal to include migrations 0006 and 0007. Migration validation now fails when SQL files and journal entries drift.
-
-Manual Task 2 blockers:
-
-- assign the legal/privacy, safety, product, billing/tax, and release owners;
-- choose the first countries for review;
-- approve the prohibited/held-country list;
-- provide approved Terms, Privacy Policy, Community Guidelines, cookie notice, subscription/refund terms, moderation/appeal policy, and retention schedule;
-- configure a trusted production edge and prevent supported clients from reaching the Render origin directly;
-- enable country switches only after the corresponding approval.
-
-#### Task 4 implementation record
-
-- Birth dates in the future are rejected.
-- Onboarding rejects every user under 18 with the stable `age_restricted` error and non-specific public wording.
-- Account activation requires an adult cohort.
-- The shared contact guard rejects existing minor accounts across social/contact HTTP paths.
-- Realtime identity creation independently requires `adult_18_plus`.
-- Existing minor accounts may still inspect their account and submit reports or appeals. They are promoted automatically after their eighteenth birthday during account reconciliation.
-- Public and onboarding copy now says 18+ and adult-only beta. The date input prevents selecting a date later than the current 18-year boundary.
-
-Verification:
-
-- full `npm run check`: passed;
-- API tests: 10 passed;
-- web tests: 7 passed;
-- contract tests: 10 passed;
-- database unit tests: 4 passed;
-- migration validation: 7 SQL migrations and matching journal entries passed;
-- secret scan: passed;
-- database integration test was added for deny-by-default availability, audited enablement, user observation, and capability checks;
-- database integration execution could not run because PostgreSQL was unavailable at `localhost:5432`; all 10 integration cases failed at the shared setup connection before executing assertions;
-- the Run 1 Redis integration limitation also remains because the Docker daemon is not running.
-
-Run 2 originally recommended Task 3 next. That work is recorded in Run 3 below.
-
-### Run 3: environment hardening and matching preferences
-
-Date: July 13, 2026  
-Status: Task 5 complete; Task 3 agent work complete and manual setup pending
-
-#### Task 3 implementation record
-
-- Added a GitHub Actions workflow with immutable read-only repository permission, Node 22, `npm ci`, full checks/build, and a separate PostgreSQL/Redis integration job that applies migrations first.
-- Production configuration rejects obvious local, example, development, and placeholder values for database, Redis, Supabase service role, birth-date encryption, TURN signing, and Stripe secrets.
-- Added `docs/operations/environment-setup.md` with isolation rules for local, CI, staging, production, and preview environments; secret destinations; MFA/ownership requirements; rotation; and smoke verification.
-- Preserved the server/client secret boundary and existing generated-bundle secret scan.
-- Added migration 0008 and kept the SQL/journal consistency check active.
-
-Manual Task 3 blockers:
-
-- create organization-owned staging and production accounts for Supabase, Vercel, Render, TURN, Stripe, SMTP, DNS/edge, Turnstile, monitoring, analytics, and support;
-- enable MFA, assign primary/backup owners, add billing/recovery methods, and record rotation procedures outside the repository;
-- enter staging and production secrets in provider secret stores;
-- configure exact OAuth, Auth, Stripe, CORS, WebSocket, and email callback/origin values;
-- run the staging verification checklist and record evidence;
-- push the repository so GitHub Actions can execute the new service-container integration job.
-
-#### Task 5 implementation record
-
-- Added private `matching_preferences` persistence for country, language, interest tags, self-described gender identity, gender preference, and opt-in relaxation.
-- Added `entitlement_grants` as the durable entitlement boundary. `matching.gender_filter` is required for any preference other than Everyone. This table is partial Task 12 groundwork and will later receive Stripe-backed grants.
-- Added authenticated GET/PUT matching-preference APIs and a settings UI. Gender identity is private and never inferred from a name, avatar, profile, or video.
-- Server-built match criteria use the trusted observed country plus profile language/interests and stored preferences. The browser cannot grant itself a filter.
-- Redis queue entries now contain bounded criteria. Pairing checks both users' preferences, blocks, recent pairs, cohort, and mode.
-- Gender compatibility is hard and symmetric. It never relaxes.
-- When both users opt in, interests relax after 15 seconds and country/language after 30 seconds. Narrow filters otherwise remain exact.
-- Next/rematch reloads current server preferences. The client sends only the relaxation choice; the server loads every sensitive criterion.
-
-Verification:
-
-- full `npm run check`: passed;
-- API tests: 12 passed, including cooldown and compatibility rules;
-- web tests: 7 passed;
-- contract tests: 11 passed;
-- database unit tests: 4 passed;
-- migration validation: 8 SQL migrations with matching journal entries;
-- secret scan: passed;
-- PostgreSQL integration coverage was added for paid gender enforcement and server criteria but could not execute locally because PostgreSQL and the Docker daemon are unavailable;
-- Redis integration coverage was updated for criteria-aware queue calls but could not execute locally for the same Docker limitation;
-- the new GitHub Actions integration job will run both suites with service containers after the repository is pushed.
-
-#### Exact Task 2 completion checklist
-
-Task 2 becomes `complete` only after a human records all of the following:
-
-- [ ] Named product, legal/privacy, safety, billing/tax, engineering release, support, incident, and data-protection owners.
-- [ ] A written approved-country list and prohibited/held-country list.
-- [ ] Published immutable Terms, Privacy Policy, Community Guidelines, cookie/analytics notice, subscription/refund terms, moderation/appeals policy, and retention schedule.
-- [ ] The three production policy version variables match those published documents.
-- [ ] The trusted edge overwrites the country header and direct origin access is not a supported client path.
-- [ ] An AAL2 admin enables registration only for legally approved countries.
-- [ ] Matching and billing are enabled separately only after safety capacity and payment/tax approval.
-- [ ] A staging user in an enabled country succeeds, while a disabled country and missing `ZZ` country fail safely.
-- [ ] The approvers and evidence are recorded in the private operations register; no private legal or secret material is committed here.
-
-That handoff was completed by Run 4 below.
-
-### Run 4: conversation ratings, safe-card reveal, and reconnect
+1. Add `level_curve_versions` and `level_curve_steps` for levels 1-50.
+2. Store minimum lifetime XP for each level and validate strictly increasing thresholds.
+3. Allow one draft version and one active version per environment.
+4. Build a pure projection function returning level, XP into level, XP to next level, and curve version.
+5. Build a bounded summary rebuild for a new curve version.
+6. Model Maxed Out's temporary max-level presentation separately from earned level.
+7. Ensure plan cancellation reveals the earned level immediately and does not write negative XP.
+8. Keep draft thresholds synthetic. Final tuning happens in V2-P2 after shadow evidence exists.
 
-Date: July 13, 2026
-
-Status: agent implementation complete; manual approvals and staging integration remain
-
-#### Tasks 7-9 implementation record
-
-- Added migration `0009_ratings_reveals_reconnect.sql` with authoritative encounter connected/rating timing, immutable per-rater conversation ratings, encounter/viewer/subject-scoped identity reveals, and expiring reconnect requests. Existing migrations were not rewritten.
-- Added shared HTTP and realtime contracts for ratings, safe cards, timer/rating availability, identity reveal, and reconnect offer/resolution events.
-- Added one account-service safe-card projection containing only avatar, username, display name, observed country, language, and interests. Exact birth date, email, bio, history, internal state, moderation, device, and billing data are not selected.
-- Rating eligibility starts at exactly 120 server-measured connected seconds. Each participant has one immutable row, duplicate retries return the original result, the window closes 24 hours after an eligible encounter ends, and the other outcome remains hidden before resolution.
-- Added a per-user total-like/total-rating projection and a moderator-only 24-hour anomaly projection for repeated pairs and coordinated all-like patterns. Ratings do not award XP, ParamPoints, quests, reputation, or any other reward.
-- Free/Lite/Loaded reveal requires the subject to share their own card. `call_card.paid_override` permits a viewer-scoped Maxed Out override only while the grant remains active. Access is re-authorized for the exact encounter and revoked/denied on block, account state, sanction, encounter expiry, or lost entitlement.
-- Added provisional onboarding, privacy-settings, and in-call disclosure plus realtime safe-card delivery. Human task H8 still owns final disclosure approval.
-- Reconnect requires `matching.reconnect`, uses only the immediately previous connected eligible encounter, reveals no identity or presence in the offer, expires after a provisional two minutes, and requires recipient acceptance.
-- Reconnect acceptance rechecks blocks, adult/active account state, and launch-country matching availability, then atomically reserves both users in Redis against concurrent queue/direct activity before persisting and publishing the new match. Decline returns both users to their existing idle/normal-matching path.
-- Added conversation controls for safe-card sharing, two-minute Like/Dislike, ended-screen rating, and eligible-plan reconnect. Product copy and the two-minute offer lifetime remain provisional pending H7-H9.
-
-Files changed:
-
-- `packages/database/migrations/0009_ratings_reveals_reconnect.sql`, migration journal, schema, and `engagement.ts`;
-- `packages/contracts/src/index.ts` and generated contract output;
-- `apps/api/src/account-service.ts`, `app.ts`, and `realtime.ts`;
-- `apps/web/src/pages.tsx`;
-- `tests/integration/database.test.ts`;
-- this execution plan.
-
-Verification:
-
-- `npm run typecheck`: passed across all workspaces;
-- `npm run lint`: passed across all workspaces before the final projection refactor; the full check below is the final authority;
-- `npm test`: passed (legacy 11, admin 3, API 12, web 7, config 4, contracts 11, database 4);
-- `npm run migrations:check`: passed with 9 migrations;
-- `npm run dev:services`: unavailable because the installed `docker` client does not provide Compose (`unknown shorthand flag: d`), so PostgreSQL/Redis integration scenarios could not execute locally;
-- final `npm run check`: passed after the account-service projection refactor and plan update; formatting, lint, typecheck, all unit/API/UI/legacy tests, 9-migration validation, and secret scan passed.
-
-Remaining risks and manual gates:
-
-- H7 must approve rating labels, disclosure, resolution behavior, and safety implications.
-- H8 must approve the Maxed Out disclosure and validate every safe-card revocation case in staging.
-- H9 must approve the provisional two-minute reconnect lifetime and consent/notification copy.
-- The new migration and multi-user flows require CI or staging verification with healthy PostgreSQL and Redis before Tasks 7-9 can move from `in_progress` to `complete`.
-- Stripe-backed plan state does not exist yet. Staging validation must use audited, expiring grants; Task 11/12 must later issue and invalidate the same stable entitlement keys.
-
-Exact next agent task: Task 10, media quality policies. Do not begin billing UI or market premium quality as guaranteed before the server media policy and browser fallbacks exist.
-
-### Run 5: media quality, Stripe billing, and centralized entitlements
-
-Date: July 13, 2026
-
-Status: Tasks 10-12 agent implementation complete; provider approval, catalog configuration, and staging validation remain
-
-#### Tasks 10-12 implementation record
-
-- Added migration `0010_billing_entitlements.sql` without rewriting prior migrations. It seeds stable Free/Lite/Loaded/Maxed Out plan keys and USD list prices, while keeping paid rows inactive until H11 supplies approved environment-specific Stripe product/price IDs. It adds durable subscriptions, idempotent webhook events, payment-failure grace state, and immutable entitlement audit records.
-- Added verified raw-body Stripe webhooks and event-first replay protection. Subscription, checkout completion, invoice paid/failed, refund, dispute, and subscription create/update/delete paths converge on one subscription projection. Older subscription object timestamps cannot overwrite newer state.
-- Added authenticated Checkout and Billing Portal endpoints. Checkout uses a caller idempotency key and only returns a hosted provider URL; redirect/return state never provisions access.
-- Added hourly scheduled reconciliation to retrieve Stripe subscription state and repair missed webhook delivery. Webhook payloads and card data are not persisted or logged.
-- Centralized all stable V1 entitlement keys in `EntitlementService`. Gender filtering, online-status viewing, premium media, reconnect, capped matching priority, safe-card override, and the remaining cosmetic/support feature keys use the same durable grant boundary. Stripe plan changes sync subscription grants; audited manual grants require an expiry and recent AAL2 admin authorization.
-- Preserved cancellation rights through the paid-through date. A provisional three-day `past_due` grace period is applied from the verified event timestamp; unpaid, paused, canceled, refunded, or disputed state removes plan rights. H11 must approve or replace this duration before live billing.
-- Added a capped queue advantage for Maxed Out: its queue timestamp receives at most a five-second boost. The queue remains oldest-compatible-first after the cap, so continued paid arrivals cannot indefinitely displace a free user.
-- Added server-owned standard (960x540, 24 fps, 900 kbps) and premium (up to 1920x1080, 30 fps, 2.5 Mbps) policy responses and realtime delivery. Browser capture constraints and sender parameters are best-effort; unsupported parameter APIs fail safely.
-- Added five-second WebRTC statistics sampling and automatic bitrate/frame-rate reduction for high loss, high round-trip time, or TURN relay. Diagnostics describe measured/adapted conditions and never promise received resolution. Permission denial continues to offer text, missing media APIs fail clearly, and camera replacement stops old tracks.
-- Presence projections and realtime presence events now require `presence.online_status`; browser claims cannot grant it. Media policy and queue priority are also resolved on the server.
-
-Files changed:
-
-- `packages/database/migrations/0010_billing_entitlements.sql`, migration journal, schema, `billing.ts`, `entitlements.ts`, matching export, and generated package output;
-- `packages/contracts/src/index.ts` and generated contract output;
-- `apps/api/src/billing-service.ts`, billing tests, `app.ts`, `realtime.ts`, `worker.ts`, and package dependencies;
-- `apps/web/src/media.ts`, media tests, and conversation integration;
-- this execution plan.
-
-Verification:
-
-- package builds for contracts and database: passed;
-- full workspace typecheck: passed;
-- final `npm run check`: passed; formatting, lint, workspace typecheck, all tests, 10-migration validation, and secret scan passed;
-- API tests: 15 passed, including signed webhook processing, invalid signatures, and replay protection;
-- web tests: 9 passed, including supported and unsupported sender-parameter behavior;
-- contract tests: 11 passed;
-- migration validation: 10 SQL migrations with matching journal entries passed;
-- PostgreSQL/Redis integration was not executed locally because the services remain unavailable; CI/staging must exercise migration 0010, concurrent webhook delivery, out-of-order events, queue fairness, entitlement revocation during active queues/calls, and TURN-only adaptation.
-
-Remaining risks and manual gates:
-
-- H10 must choose/fund TURN, test representative browsers/networks/regions, set relay budgets, and approve or replace both quality targets.
-- H11 must obtain Stripe and tax approval, approve the provisional three-day grace and five-second queue cap, populate sandbox/live catalog IDs outside source code, configure Portal/webhooks, and run the complete sandbox matrix.
-- Paid catalog rows intentionally remain inactive. Checkout fails closed until an approved price ID and `active=true` are applied by controlled operational configuration.
-- Reconciliation currently runs in the existing maintenance worker cadence and uses a one-hour staleness threshold. Operations must confirm the worker schedule and alerting before live billing.
-- Safari, Firefox, Chromium, iOS, Android, camera switching, network handoff, and TURN-only behavior require real-device staging evidence; unit tests cannot certify browser/hardware behavior.
-
-Exact next agent task: Task 13, replace the premium placeholder UI using the server catalog and entitlement/subscription projection. Do not activate paid catalog rows or present checkout as live until H11 is complete.
-
-## 17. Human tasks
-
-This is the canonical checklist for work that Codex agents cannot complete alone. Each item names the agent task it unblocks. Keep secrets, identity documents, contracts, private legal advice, employee details, and recovery codes outside the repository. Record only completion status, owner role, date, and a safe evidence reference here.
-
-Use these status values:
-
-- `not_started`: no human owner has begun the work;
-- `in_progress`: an owner is actively working on it;
-- `waiting_external`: submitted to a vendor, lawyer, bank, auditor, or authority;
-- `complete`: evidence has been checked and the related gate passed;
-- `not_applicable`: a named approver documented why it does not apply.
-
-### Human task H1: assign accountable owners
-
-Related agent tasks: Task 1 and every public-beta gate  
-Status: `not_started`
-
-1. Name one primary and one backup for product approval.
-2. Name the engineering release owner.
-3. Name the safety and moderation owner.
-4. Name the privacy/legal owner.
-5. Name the billing and tax owner.
-6. Name the customer-support owner.
-7. Name the incident commander and backup.
-8. Name the data-protection contact.
-9. Give each person a written responsibility and escalation boundary.
-10. Store names and contact details in a private operations register, not this public repository.
-11. Add a safe evidence reference below and change the status to `complete`.
-
-Completion evidence: unassigned
-
-### Human task H2: approve launch countries and policies
-
-Related agent task: Task 2  
-Status: `not_started`
-
-1. Give qualified counsel the V1 product description: 18+ random text/video matching, profiles, reporting, blocking, subscriptions, English-only support, no call recording, and country-by-country availability.
-2. Produce an approved-country list and a prohibited/held-country list.
-3. For each approved country, record privacy, consumer, age-assurance, online-safety, advertising, payment, tax, and law-enforcement requirements.
-4. Approve the legal entity name, physical/legal address, support contact, privacy contact, and governing-law language shown to users.
-5. Publish immutable versions of the Terms of Service, Privacy Policy, Community Guidelines, cookie/analytics notice, subscription/cancellation/refund terms, moderation and appeals policy, and retention schedule.
-6. Assign version identifiers for Terms, Privacy, and Guidelines. Enter those identifiers as `CURRENT_TERMS_VERSION`, `CURRENT_PRIVACY_VERSION`, and `CURRENT_GUIDELINES_VERSION` in staging first.
-7. Verify `GET /v1/policies/current` returns the published versions.
-8. Have a test adult accept all three documents and confirm three acceptance records are created.
-9. Configure the trusted edge to overwrite the country header. Do not forward a browser-supplied value.
-10. Confirm direct access to the Render origin is not a supported client path.
-11. In the AAL2 admin screen, add the reviewed country with every switch off.
-12. Enable registration only after legal approval.
-13. Enable matching only after moderation capacity and safety approval.
-14. Enable billing only after payment-provider and tax approval.
-15. Test an enabled country, a disabled country, a malformed header, and missing-country `ZZ` behavior in staging.
-16. Record approvers, dates, policy URLs, country decision references, and staging evidence in the private register.
-
-Completion evidence: unassigned
-
-### Human task H3: create and secure provider environments
-
-Related agent task: Task 3  
-Status: `not_started`
-
-Follow `docs/operations/environment-setup.md` and complete these steps separately for staging and production:
-
-1. Create organization-owned GitHub, Supabase, Vercel, Render, TURN, Stripe, SMTP, DNS/edge, Turnstile, monitoring, analytics, and support accounts/projects.
-2. Do not create production infrastructure under a disposable personal account.
-3. Enable MFA for every human operator. Store recovery codes in the approved password manager.
-4. Assign least-privilege roles and primary/backup owners.
-5. Add billing methods, billing alerts, and account-recovery contacts.
-6. Create separate Supabase projects, databases, Auth configuration, storage buckets, and service-role keys for staging and production.
-7. Configure custom SMTP, SPF, DKIM, DMARC, email templates, and disabled click tracking for Auth links.
-8. Create separate Google OAuth clients and exact redirect URLs.
-9. Create separate Vercel user/admin projects and set only approved `VITE_*` values.
-10. Create Render API, worker, and Redis services. Enter server secrets only in Render secret storage.
-11. Configure exact web, admin, and preview origins. Do not use a broad `*.vercel.app` production wildcard.
-12. Configure the trusted country edge and restrict/avoid direct origin use.
-13. Create staging and production monitoring projects and alert destinations.
-14. Push the repository and confirm both GitHub Actions jobs pass, including PostgreSQL/Redis integration tests and migrations.
-15. Run every verification step in `docs/operations/environment-setup.md` and `docs/operations/deployment.md`.
-16. Record safe project identifiers, owners, verification date, and alert destinations in the private register. Never record secret values here.
-
-Completion evidence: unassigned
-
-### Human task H4: validate adult-only onboarding in staging
-
-Related agent task: Task 4  
-Status: `not_started`
-
-1. Start or provision the staging PostgreSQL and Redis services.
-2. Apply all migrations.
-3. Test a birth date one day below the 18-year boundary; onboarding must fail.
-4. Test the exact eighteenth birthday; onboarding may continue.
-5. Test an invalid date, future date, and leap-day boundary.
-6. Confirm an existing minor fixture cannot match, message, request, or call.
-7. Confirm the same account may still inspect its account and submit a report or appeal.
-8. Confirm the user-facing response does not reveal private cohort logic.
-9. Save test evidence without retaining real identity documents or unnecessary birth dates.
-
-Completion evidence: unassigned
-
-### Human task H5: validate matching preferences with real services
-
-Related agent task: Task 5  
-Status: `not_started`
-
-1. Run the GitHub integration job or start PostgreSQL and Redis locally.
-2. Apply migration 0008.
-3. Create two adult staging accounts in enabled countries.
-4. Confirm free accounts can save country, language, interests, identity, and Everyone gender preference.
-5. Confirm a free account cannot save a restricted gender preference.
-6. Add a temporary, audited `matching.gender_filter` grant to one staging account through an approved administrative/database procedure.
-7. Confirm the entitled account can save a gender preference.
-8. Test symmetric gender compatibility. An incompatible pair must not match.
-9. Test exact country, language, and interest matching.
-10. Confirm interests broaden after 15 seconds only when both users consent.
-11. Confirm country/language broaden after 30 seconds only when both users consent.
-12. Confirm gender never broadens.
-13. Revoke the temporary grant and confirm the paid filter is no longer effective.
-14. Remove test grants and record non-secret test evidence.
-
-Completion evidence: unassigned
-
-### Human task H6: validate the text cooldown with Redis
-
-Related agent task: Task 6  
-Status: `not_started`
-
-1. Run the Redis integration suite through GitHub Actions or a healthy local Redis instance.
-2. Open a real random text conversation with two staging browsers.
-3. Confirm Next is disabled for 25 connected seconds.
-4. Attempt an early Next with a modified client; the server must reject it without ending the conversation.
-5. Confirm reconnecting and changing the device clock do not bypass the timer.
-6. Confirm Leave, Report and leave, and Block remain immediate.
-7. Confirm video Next remains immediate.
-8. Record the integration run and browser evidence.
-
-Completion evidence: unassigned
-
-### Human task H7: approve conversation-rating product copy
-
-Related agent task: Task 7  
-Status: `not_started`
-
-1. Approve the exact Like and Dislike labels.
-2. Approve the explanation that ratings become available after two connected minutes.
-3. Approve whether users see the other response after both submit or only see their own submission status.
-4. Confirm the 24-hour rating window.
-5. Confirm V1 ratings award no XP, ParamPoints, quest progress, or reputation changes.
-6. Review anti-brigading and appeal implications with the safety owner.
-7. Review the provisional in-call and ended-screen copy implemented in Run 4, supply approved replacement copy, and have product and safety sign off before public beta.
-8. In staging, test just before and at 120 connected seconds, duplicate submission, attempted outcome change, both-participant resolution, a block/report after rating, and the 24-hour expiry.
-
-Completion evidence: unassigned
-
-### Human task H8: approve the Maxed Out safe-card disclosure
-
-Related agent task: Task 8  
-Status: `not_started`
-
-1. Review the safe-card fields: avatar, username, display name, country, language, and interests.
-2. Confirm that bio, exact birth date, email, history, device, moderation, billing, and restricted fields never appear.
-3. Approve onboarding, privacy-settings, call-room, and subscription-page disclosure explaining the Maxed Out override.
-4. Review the rule with privacy/legal and product owners.
-5. Confirm Block, deletion, sanction, encounter expiry, and lost entitlement revoke access.
-6. Supply approved copy and a safe evidence reference to the implementing agent.
-7. Review the provisional onboarding, privacy-settings, and call-room disclosure implemented in Run 4 and supply exact approved replacement text.
-8. In staging, test subject consent for a free account, the scoped `call_card.paid_override` grant, grant expiry/revocation, encounter substitution, block, sanction, deletion-pending, and encounter expiry.
-9. Inspect the actual response and confirm that exact birth date, email, bio, history, device, moderation, billing, and internal fields are absent.
-
-Completion evidence: unassigned
-
-### Human task H9: approve reconnect behavior
-
-Related agent task: Task 9  
-Status: `not_started`
-
-1. Approve the reconnect-offer lifetime.
-2. Approve the consent and notification copy shown to both users.
-3. Confirm reconnect cannot expose a profile or online status before authorization.
-4. Confirm blocks, sanctions, deletion, country changes, and lost entitlement invalidate the offer.
-5. Test the final flow with two staging accounts after implementation.
-6. Explicitly approve or replace the provisional two-minute offer lifetime implemented in Run 4.
-7. In staging, verify Free/Lite denial, Loaded/Maxed Out access through an audited expiring grant, decline, expiry, simultaneous queue join, block, sanction, deletion-pending, and country disablement.
-8. Confirm the offer notification exposes neither profile identity nor durable presence, and record product/safety approval in the private register.
-
-Completion evidence: unassigned
-
-### Human task H10: choose and fund TURN service
-
-Related agent task: Task 10  
-Status: `not_started`
-
-1. Compare managed TURN vendors for regions, latency, reliability, credential API, abuse controls, DPA, support, and cost.
-2. Run connection tests from representative launch regions and restrictive networks.
-3. Estimate relay usage and cost for Free/Lite and premium quality targets.
-4. Select a vendor and accept its contract/DPA.
-5. Create separate staging and production credentials.
-6. Store secrets in Render and record rotation/kill procedures.
-7. Approve the initial free and premium quality targets based on measured results.
-8. Set budget alerts and a maximum acceptable TURN cost per 1,000 conversations.
-9. Validate or replace Run 5's provisional standard target (960x540/24 fps/900 kbps) and premium ceiling (1920x1080/30 fps/2.5 Mbps).
-10. Test permission denial, no-camera/no-microphone devices, unsupported sender parameters, camera switching, Wi-Fi/cellular handoff, high loss/latency, and forced relay on current Safari, Firefox, Chromium, iOS, and Android.
-11. Record the selected vendor dashboard URL, credential owner/scope, Render secret destinations (`TURN_URLS`, `TURN_CREDENTIAL_SECRET`), rotation/revocation procedure, test date, and safe evidence reference in the private operations register. Never copy credentials here.
-
-Completion evidence: unassigned
-
-### Human task H11: obtain Stripe approval and configure billing
-
-Related agent tasks: Tasks 11, 12, and 13  
-Status: `not_started`
-
-1. Create and verify the business entity, bank account, tax identity, and Stripe account.
-2. Disclose the 18+ random-video UGC model, countries, moderation controls, prohibited content, and subscription perks to Stripe.
-3. Answer enhanced-review questions and wait for approval before live billing.
-4. Obtain written confirmation when Stripe requests or provides product-specific approval.
-5. Determine where sales tax, VAT, or GST registration is required. Register before collecting where required.
-6. Approve the final Free, Lite, Loaded, and Maxed Out names, USD monthly prices, refund rules, cancellation behavior, grace period, proration, and support authority.
-7. Create separate sandbox and live products/prices.
-8. Configure the Billing Portal and webhook endpoint.
-9. Store Stripe IDs as configuration/catalog data and secrets in Render, never in browser variables.
-10. Run sandbox purchase, renewal, upgrade, downgrade, payment failure, cancellation, refund, dispute, duplicate webhook, and reconciliation tests.
-11. Review and approve the final premium comparison page. V2-only benefits must say "coming in V2."
-12. Record live approval, tax decisions, catalog IDs, and test evidence in the private register without recording secret keys.
-13. In the [Stripe Dashboard](https://dashboard.stripe.com/), record separate test/live product and monthly price IDs against stable keys `lite`, `loaded`, and `maxed_out`; apply them to `subscription_plans` through a controlled operational change and activate a paid row only in its matching environment.
-14. Approve or replace Run 5's provisional three-day payment-failure grace period and five-second capped Maxed Out queue advantage. Record user copy and refund/dispute revocation policy.
-15. Configure the exact webhook endpoint `/v1/billing/webhooks/stripe` for subscription created/updated/deleted, checkout completion, invoice paid/payment failed, charge refunds, and charge disputes. Store `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` only in the matching Render environment and record rotation/rollback.
-16. Confirm the maintenance worker is scheduled and monitored for hourly reconciliation; alert on failed webhook processing, stale subscription reconciliation, or a paid catalog with a missing/mismatched price ID.
-17. Verify in staging that cancellation retains access only through the paid-through date, grace expiry removes access, active calls/queues refresh after revocation, duplicate/out-of-order webhooks do not re-grant, refunds/disputes revoke, manual grants expire with audit records, and free users are not starved by paid queue traffic.
-
-Completion evidence: unassigned
-
-### Human task H12: approve moderation policy and staff the queue
-
-Related agent task: Task 14  
-Status: `not_started`
-
-1. Approve report reasons, severity, priority, and required evidence.
-2. Approve sanction ranges for harassment, NSFW, spam, hate, fake camera, and underage use.
-3. Define urgent escalation for threats, exploitation, illegal content, and underage reports.
-4. Define appeal eligibility, reviewer separation, response targets, and reversal authority.
-5. Define evidence and audit retention by severity.
-6. Hire or assign moderators and support staff for the initial capacity and operating hours.
-7. Train staff on privacy, minimum-necessary access, illegal-content handling, escalation, and account security.
-8. Enroll every admin in MFA and test joiner/mover/leaver access removal.
-9. Run a tabletop moderation exercise and record results.
-10. Do not enable public matching above staffed moderation capacity.
-11. Review Run 6's provisional escalation targets: urgent 15 minutes, high 60 minutes, and standard 24 hours; replace them where the approved policy differs.
-12. In staging, verify urgent/high/standard ordering, oldest-first handling, overdue display, purpose-bound evidence reveal, evidence expiry display, assignment, every sanction type, recent-reauthentication rejection, audit creation, and appeal reviewer separation.
-13. Approve or replace the provisional reason templates returned by `/v1/admin/moderation/templates`; ensure illegal-content and underage procedures point to private runbooks rather than sensitive instructions in the client.
-
-Completion evidence: unassigned
-
-### Human task H13: create Turnstile and approve anti-abuse friction
-
-Related agent task: Task 15  
-Status: `not_started`
-
-1. Create separate staging and production Turnstile widgets under the organization account.
-2. Configure exact production hostnames and keep local/test keys separate.
-3. Store site keys in approved public config and secret keys in server secret storage.
-4. Approve which risk conditions trigger a challenge.
-5. Approve rate-limit thresholds and user-facing retry copy.
-6. Test success, failure, expiry, replay, provider outage, and accessibility.
-7. Review false-positive and appeal paths with safety/support.
-8. Configure `VITE_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and the exact comma-separated `TURNSTILE_ALLOWED_HOSTNAMES` independently in staging and production; never expose the secret key to Vite.
-9. Confirm Supabase Auth CAPTCHA protection is enabled for signup and password recovery and uses the matching environment widget.
-10. Validate expected action and hostname rejection, five-minute expiry, single-use replay rejection, provider outage, IPv4/IPv6 prefix behavior, keyboard/screen-reader operation, and an account moving between networks.
-11. Review Run 6's provisional limits: 30 guarded writes per account/path/minute, 20 guarded writes per session/path/minute, 20 queue joins/minute, 60 direct messages/minute, four identical messages/minute, 10 reports/hour, and 20 challenge attempts/network prefix/five minutes. Approve replacements based on staging abuse/load evidence.
-12. Confirm Block, Leave, Report, and Report and leave remain usable under unrelated message/queue friction; define the support path when a report-specific limit is reached.
-
-Completion evidence: unassigned
-
-### Human task H14: approve an NSFW/fake-camera risk model
-
-Related agent task: Task 16  
-Status: `not_started`
-
-1. Decide whether V1 will enable automated visual risk signals at all.
-2. Evaluate candidate models/providers for license, privacy, processing location, DPA, device performance, explainability, and cost.
-3. Approve user notice and policy language before processing frames.
-4. Confirm frames stay on-device under the default design and are never logged or uploaded.
-5. Test accuracy across representative lighting, devices, skin tones, clothing, camera quality, and accessibility scenarios.
-6. Define warning, local pause/blur, moderator visibility, retention, and kill-switch behavior.
-7. Confirm the model cannot issue a permanent sanction by itself.
-8. Approve enabled countries and record the review.
-
-Completion evidence: unassigned
-
-### Human task H15: approve privacy operations and retention
-
-Related agent task: Task 17  
-Status: `not_started`
-
-1. Approve the final data inventory and retention schedule.
-2. Define export scope, identity verification, delivery method, response target, and excluded internal data.
-3. Define deletion reauthentication, cancellation window, billing handling, safety/legal holds, anonymization, and completion target.
-4. Approve what records survive deletion, why, who can access them, and when they expire.
-5. Test export and deletion with active friendships, calls, reports, sanctions, and subscriptions.
-6. Define the process for privacy requests received through support or legal channels.
-7. Record counsel/privacy-owner approval.
-8. Approve or replace Run 7's provisional seven-day cancellation window and 30-day deletion-request retention; approve the worker-generated signed-download delivery process and archive expiry.
-9. Create and restrict the private export storage bucket used by the service role. Confirm signed URLs expire after five minutes, archives after 24 hours, and archive keys/tokens never enter logs or support tickets.
-
-Completion evidence: unassigned
-
-### Human task H16: choose monitoring, analytics, support, and budgets
-
-Related agent task: Task 18  
-Status: `not_started`
-
-1. Select error monitoring, uptime monitoring, privacy-safe analytics, paging, and support providers.
-2. Sign required DPAs and choose data regions/retention.
-3. Create separate staging and production projects.
-4. Add named alert recipients and an on-call schedule.
-5. Approve privacy-safe event names and prohibited fields.
-6. Set monthly and anomaly budgets for Render, Supabase, Redis, TURN, email, storage, Stripe, and monitoring.
-7. Test every severity-one alert and escalation route.
-8. Record provider ownership, dashboards, retention, and budget thresholds in the private register.
-9. Implement the alert-to-runbook mapping in `docs/operations/observability-runbook.md`; verify the AAL2 admin metrics endpoint is not exposed to public users and that redaction is retained in the selected provider.
-
-Completion evidence: unassigned
-
-### Human task H17: commission independent security and accessibility review
-
-Related agent task: Task 19  
-Status: `not_started`
-
-1. Publish a security contact and vulnerability-disclosure process.
-2. Select an independent penetration-testing provider with WebRTC, realtime, Auth, billing, and privacy experience.
-3. Define staging scope and safe test accounts.
-4. Remediate every critical/high finding and obtain retest evidence.
-5. Arrange a manual accessibility review covering keyboard, screen readers, contrast, reduced motion, permissions, call controls, and admin flows.
-6. Record accepted lower-risk findings with owner and deadline.
-7. Do not open unrestricted public traffic with an unresolved critical/high finding.
-8. Include Run 7's deletion/session revocation, export authorization, signed archive expiry, CSP/headers, WebSocket ticket/origin checks, Stripe raw-body verification, and profile/message rendering in the independent review scope.
-
-Completion evidence: unassigned
-
-### Human task H18: approve capacity from load and moderation results
-
-Related agent task: Task 20  
-Status: `not_started`
-
-1. Run the automated load tests in staging with approved provider limits.
-2. Review socket, queue, database, Redis, worker, TURN, and cost results.
-3. Compare the technical ceiling with staffed moderation/support capacity.
-4. Choose a lower global and per-country launch ceiling.
-5. Approve beta-full messaging and waitlist/support handling.
-6. Record the ceiling, evidence, owner, and conditions for increasing it.
-
-Completion evidence: unassigned
-
-### Human task H19: configure domains and rehearse launch
-
-Related agent task: Task 21  
-Status: `not_started`
-
-1. Purchase or transfer organization-owned product, API, admin, auth, and support domains.
-2. Configure DNS, TLS, edge proxying, country-header overwrite, SPF, DKIM, and DMARC.
-3. Enter exact production origins and callbacks in every provider dashboard.
-4. Choose and approve recovery point and recovery time objectives.
-5. Run backup restore, Redis loss, webhook replay, Auth outage, TURN outage, credential rotation, bad migration, compromised admin, and data-exposure rehearsals.
-6. Run the internal alpha gate.
-7. Run the closed-beta gate with invited adults.
-8. Review safety backlog, uptime, match success, queue wait, TURN cost, support load, and billing behavior.
-9. Obtain written product, safety, legal/privacy, billing, and engineering release approvals.
-10. Enable the first approved country at a low capacity.
-11. Monitor before raising capacity or enabling another country.
-
-Completion evidence: unassigned
-
-### Human task maintenance rule for future agents
-
-Every agent that completes or changes a numbered task must review this Human tasks section before handoff.
-
-If its work creates, changes, resolves, or discovers human work, the agent must:
-
-1. Add or update the human task under the matching agent task number.
-2. Write exact ordered steps, not a vague instruction such as "configure provider."
-3. State who must approve or perform the work by role.
-4. State what evidence proves completion without exposing secrets or private material.
-5. Update the status and completion-evidence line.
-6. Update the main progress ledger and Current handoff if the human work blocks another task or launch gate.
-7. Preserve completed human-task history; do not delete it merely because the code changed.
-8. Never mark a human task complete based on assumption, simulated data, or an agent's own judgment when external approval is required.
-
-Future agents must treat this section as part of the definition of done.
+Verify:
+
+- Exact threshold, below-threshold, above-level-50, zero, and large-integer tests.
+- Invalid or non-monotonic curves cannot activate.
+- Switching curve version rebuilds projections without changing XP transactions.
+- Temporary Maxed presentation never changes ledger totals.
+
+Done when: every level display can name its curve version and be rebuilt from lifetime XP.
+
+### V2-N5: define server-confirmed progression events
+
+Goal: create a stable input boundary without wiring rewards into V1 hot paths yet.
+
+Steps:
+
+1. Define versioned event types such as eligible conversation completed, rating submitted, friendship accepted, confirmed moderation outcome, subscription period started, and quest progress.
+2. Add `progression_events` with source type/ID, subject user, occurrence time, schema version, processing state, and deduplication key.
+3. Keep payloads minimal. Do not copy messages, reports, profile text, or media into progression storage.
+4. Add a consumer checkpoint or per-rule processing record so a new rule version can replay safely.
+5. Build fixture producers and replay tools using synthetic encounters/subscriptions.
+6. Define which events may later be reversed and which moderation outcome triggers that reversal.
+7. Do not hook these producers into live repositories until V2-P0 approves real shadow processing.
+
+Verify:
+
+- Duplicate source events collapse to one canonical event.
+- Schema-version mismatch fails closed.
+- Replay is bounded, resumable, and idempotent.
+- Logs and fixtures contain no prohibited fields.
+
+Done when: reward engines can consume synthetic authoritative events without reading V1 tables ad hoc.
+
+### V2-N6: build reputation shadow foundations
+
+Goal: make reputation explainable and testable before it affects a person.
+
+Depends on: V2-N5.
+
+Steps:
+
+1. Add versioned `reputation_models`, `reputation_events`, and rebuildable `reputation_summaries`.
+2. Limit inputs to approved server outcomes: eligible ratings, confirmed reports, overturned reports, blocks, account age, and detected collusion.
+3. Keep raw user text and protected characteristics out of the model.
+4. Add minimum sample sizes and confidence state. A score without enough data is `insufficient_data`.
+5. Add caps so one peer or coordinated group cannot dominate a score.
+6. Model recovery through time and approved tasks. Do not add daily XP decay.
+7. Produce reason codes suitable for later user explanations.
+8. Keep the score hidden and unable to change matching, sanctions, rewards, or profile display.
+
+Verify:
+
+- Sparse data, brigading, mutual-rating rings, overturned reports, recovery, and model-version replay.
+- The same input set produces the same score and reason codes.
+- Removing an invalidated event rebuilds through a compensating event, not history editing.
+
+Done when: synthetic shadow scores are reproducible, explainable, and powerless.
+
+### V2-N7: build quest and streak foundations
+
+Goal: model quests without choosing live reward amounts.
+
+Depends on: V2-N3 and V2-N5.
+
+Steps:
+
+1. Add versioned quest definitions with objective type, target, reset period, eligibility, start/end, and disabled reward reference.
+2. Add quest assignments, progress records, claims, and expiry.
+3. Make assignment deterministic and auditable.
+4. Count server-confirmed events only.
+5. Add rule fields for minimum conversation duration, distinct counterpart count, daily cap, and excluded sanctioned/blocked encounters.
+6. Add one idempotent progress update per source event.
+7. Add one idempotent claim record. Keep reward minting disconnected.
+8. Model streak timezone and missed-day behavior explicitly; use a user setting only after product approval.
+9. Provide synthetic daily/weekly definitions for tests, not product defaults.
+
+Verify:
+
+- Reset boundary, timezone, expiry, duplicate event, duplicate claim, distinct-peer, block/report, and replay cases.
+- Progress never comes from a browser-supplied counter.
+- A disabled or expired quest cannot claim.
+
+Done when: fixtures can assign, progress, complete, expire, and claim a zero-value quest exactly once.
+
+### V2-N8: build subscription-grant foundations
+
+Goal: prepare daily plan grants without changing Stripe or live entitlements.
+
+Depends on: V2-N3 and the existing V1 billing projection.
+
+Steps:
+
+1. Add versioned grant rules keyed by stable plan key and period.
+2. Add `subscription_grant_periods` with user, subscription, plan, period date, rule version, and idempotency key.
+3. Calculate eligibility from server subscription state at the approved cutoff.
+4. Define cancellation, upgrade, downgrade, past-due grace, refund, dispute, and missed-worker behavior.
+5. Build a dry-run worker against fake subscription fixtures.
+6. Have the worker call the shared ledger service only through a disabled adapter.
+7. Keep Maxed Out temporary level presentation separate from daily grants.
+8. Do not add or change Stripe webhook behavior in this chunk.
+
+Verify:
+
+- Duplicate worker run, delayed run, upgrade day, downgrade day, cancellation, refund, dispute, grace expiry, and timezone boundary.
+- One user/plan/period produces at most one grant record.
+- Ineligible fixtures produce no ledger transaction.
+
+Done when: dry-run output is deterministic and no live subscription can mint a reward.
+
+### V2-N9: build safe cosmetic ownership foundations
+
+Goal: prepare a larger cosmetic catalog without creating a store.
+
+Steps:
+
+1. Add `cosmetic_items`, `user_cosmetics`, and `cosmetic_loadouts` if the final schema does not already exist.
+2. Support approved slots only: avatar frame, profile theme tokens, nameplate, cosmetic badge, and reduced-motion-safe call effect.
+3. Reserve staff, moderator, safety, and verification visual namespaces. Paid items cannot imitate them.
+4. Store asset references from an approved processed-asset pipeline. Never render arbitrary HTML, CSS, SVG, script, or remote code.
+5. Track ownership source, source ID, validity, revocation, and catalog version.
+6. Make loadout changes versioned and idempotent.
+7. Build a server projection that returns only owned, active, compatible items.
+8. Keep catalog management read-only and hidden. No purchase/spend route yet.
+
+Verify:
+
+- Ownership expiry/revocation, unowned equip, conflicting slots, unsafe asset type, reserved badge, reduced motion, and XSS payloads.
+- Block/report/call controls remain visible with every test cosmetic.
+
+Done when: synthetic grants can equip safe cosmetics without money, points, or public UI.
+
+### V2-N10: add shadow diagnostics and foundation tests
+
+Goal: give engineers a safe way to inspect V2 foundations before integration.
+
+Depends on: V2-N1 through V2-N9.
+
+Steps:
+
+1. Add AAL2 admin diagnostics for flags, ledger counts, rebuild mismatch counts, event lag, model version, quest processing, and grant dry runs.
+2. Show internal IDs and aggregate counts only. Do not expose private event payloads.
+3. Add bounded rebuild/replay commands with `--dry-run`, limit, cursor, and explicit environment output.
+4. Add metrics for duplicate suppression, processing failure, replay lag, rebuild mismatch, and kill-switch state.
+5. Add database integration tests for every new constraint and race.
+6. Add a V2 foundation test script suitable for CI.
+7. Write short operator notes for clearing synthetic data and stopping a runaway worker.
+8. Keep all production flags disabled.
+
+Verify:
+
+- Unauthorized/non-AAL2 users cannot access diagnostics.
+- Dry runs write nothing.
+- Bounded jobs resume after failure.
+- The V1 test suite remains unchanged and passing.
+
+Done when: the full disabled V2 foundation can be inspected and tested without affecting a V1 account.
+
+## 8. V2 integration and rollout tasks
+
+Start this section after V2-N1 through V2-N10 are complete. Continue in the same normal codebase. A V1 regression blocks the affected V2 task until it is fixed and retested.
+
+### V2-P0: accept the disabled V2 foundation
+
+Goal: prove the V2 foundation is safe before processing real progression events.
+
+Steps:
+
+1. Confirm V2-N1 through V2-N10 are complete and reviewed on `main`.
+2. Confirm migration ordering from the V1 tag through the current revision without rewriting applied migrations.
+3. Run the full clean-checkout check, PostgreSQL/Redis integration suite, E2E suite, and builds.
+4. Deploy the current revision to staging with every V2 flag off.
+5. Run Gate A's real-device text/video and forced-TURN regression.
+6. Test auth, billing, matching, moderation, privacy, worker, and realtime behavior against the accepted V1 result.
+7. Run ledger rebuilds, bounded dry runs, authorization tests, and kill-switch tests using synthetic data.
+8. Confirm no V2 balance, level, quest, reputation effect, cosmetic grant, invite reward, or ad is visible to a V1 user.
+9. Record engineering, safety, privacy, and operations approval for real shadow processing.
+
+Done when: the disabled foundation passes its tests, V1 behavior is unchanged, and real shadow processing is approved.
+
+### V2-P1: wire real progression events in shadow mode
+
+Goal: observe real eligible events without minting points or XP.
+
+Depends on: V2-P0 and V2-N5.
+
+Steps:
+
+1. Approve the minimal event list with product, safety, privacy, and engineering.
+2. Wire event creation into durable server-confirmed boundaries.
+3. Prefer a transactional outbox where event loss would break correctness.
+4. Make progression failure non-destructive to the underlying V1 action while alerting on lag/loss.
+5. Turn on economy/reputation shadow flags for staff accounts only.
+6. Compare source table counts with progression event counts.
+7. Replay a bounded window and prove it creates no duplicate processing records.
+8. Expand shadow observation to a small beta cohort after privacy approval.
+
+Verify:
+
+- Conversation/rating/friend/subscription source reconciliation.
+- Blocked, sanctioned, short, duplicate, and ineligible encounters do not become eligible reward events.
+- Shadow processing adds no user-visible balance, level, quest, or reputation.
+
+Done when: event completeness and duplicate rates stay within approved thresholds for the observation period.
+
+### V2-P2: calibrate the economy and approve reward rules
+
+Goal: choose amounts from measured behavior instead of guesses.
+
+Depends on: V2-P1 observation data.
+
+Steps:
+
+1. Measure eligible events per active user/day and distribution by cohort, plan, country, and account age.
+2. Simulate candidate ParamPoint and XP rules against shadow events.
+3. Calculate expected daily/monthly issuance, level speed, quest completion, and subscription share.
+4. Run abuse simulations for pair farming, account rings, rapid reconnect, rating exchange, and invite fraud.
+5. Choose daily caps, distinct-peer rules, minimum durations, reversal rules, and support boundaries.
+6. Approve the level curve through level 50.
+7. Approve what points can buy and whether a balance may go negative after reversal.
+8. Obtain product, safety, finance, support, privacy, and engineering sign-off on a versioned rule set.
+9. Publish plain user explanations before live rollout.
+
+Done when: one immutable rule version and rollback threshold set has written approval.
+
+### V2-P3: launch ParamPoints, XP, and levels to a small cohort
+
+Goal: expose the first live progression loop without quests or ads.
+
+Depends on: V2-P2.
+
+Steps:
+
+1. Activate the approved curve and reward rule version in staging.
+2. Run source-to-ledger, reversal, rebuild, and plan-cancellation acceptance tests.
+3. Add authenticated APIs for the user's own balance, XP, level, and recent safe transaction descriptions.
+4. Add profile/progression UI with loading, empty, error, and reduced-motion states.
+5. Never return another user's private transaction history.
+6. Enable live minting for staff, then an invited percentage cohort in one approved country.
+7. Compare live issuance with shadow prediction every day.
+8. Stop minting through the kill switch if mismatch, farming, support load, or retention thresholds fail.
+9. Reconcile and repair through reversal/replay tools, never manual balance edits.
+
+Done when: the cohort completes the approved observation period with correct ledgers, acceptable abuse, and no V1 regression.
+
+### V2-P4: launch quests and streaks
+
+Goal: add structured goals after the base ledger is trusted.
+
+Depends on: V2-P3.
+
+Steps:
+
+1. Approve a small first catalog of daily and weekly quests.
+2. Avoid goals that reward excessive skipping, mass messaging, reporting, or unsafe contact.
+3. Attach approved reward references to versioned definitions.
+4. Add user APIs for assignments, progress, expiry, and claim.
+5. Add accessible UI with timezone/reset explanation.
+6. Enable one quest type for staff and verify server-only progress.
+7. Roll out to a small cohort and monitor completion distribution, farming, conversation quality, reports, and retention.
+8. Add streaks only after reset/missed-day support cases are understood.
+9. Reverse rewards for invalidated source events using the ledger service.
+
+Done when: quests improve the approved outcome without increasing low-quality conversations or abuse.
+
+### V2-P5: launch subscription grants and Maxed presentation
+
+Goal: turn approved V2 plan benefits on without weakening billing authority.
+
+Depends on: V2-P3 and H11's stable live billing evidence.
+
+Steps:
+
+1. Approve daily grant amounts, cutoff/timezone, missed-worker behavior, grace behavior, and plan-change rules.
+2. Approve Maxed Out's temporary level presentation copy.
+3. Activate grant rules in Stripe test mode and run the complete lifecycle matrix.
+4. Confirm webhook replay/out-of-order events cannot duplicate grants.
+5. Confirm refunds/disputes/cancellation apply approved future-grant and reversal policy.
+6. Enable staff accounts, then a small paid cohort.
+7. Reconcile grant periods against subscription periods daily.
+8. Confirm loss of Maxed Out reveals earned level without changing XP.
+9. Update the premium page only after the benefits are live.
+
+Done when: every plan transition produces the approved grant exactly once and user copy matches reality.
+
+### V2-P6: introduce reputation effects and recovery
+
+Goal: use reputation carefully without turning it into an opaque punishment score.
+
+Depends on: a stable V2-N6 shadow observation and approved moderation/appeal operations.
+
+Steps:
+
+1. Review model outcomes for bias, sparse data, brigading, and country/cohort differences.
+2. Approve minimum samples, explanation codes, recovery tasks, appeal/review path, and retention.
+3. Start with earning modifiers or access to positive recovery tasks.
+4. Do not use reputation for permanent sanctions or paid queue priority.
+5. Add a private user explanation that avoids exposing reporter identity or anti-abuse thresholds.
+6. Give support/moderation the minimum diagnostics needed to review disputes.
+7. Roll out to a small cohort with a control group.
+8. Monitor false positives, appeal overturns, safety outcomes, reward issuance, and retention.
+9. Disable effects while preserving shadow calculation if thresholds fail.
+
+Done when: independent review finds the effects explainable, appealable, and acceptably fair.
+
+### V2-P7: launch the cosmetic catalog and point spending
+
+Goal: provide a safe use for ParamPoints after issuance is stable.
+
+Depends on: V2-P3 and V2-N9.
+
+Steps:
+
+1. Approve initial items, prices, availability, expiry, refund rules, and reserved visual namespaces.
+2. Add an immutable spend transaction linked to cosmetic ownership creation in one database transaction.
+3. Make purchase idempotent and reject insufficient balance server-side.
+4. Define reversal/refund behavior without deleting ownership history.
+5. Add catalog, owned-items, purchase, and loadout APIs.
+6. Add accessible preview and reduced-motion behavior.
+7. Security-test asset processing, CSS/token bounds, XSS, IDOR, price forgery, and concurrent purchase.
+8. Enable a small non-paid catalog cohort first.
+9. Monitor support/refund load and whether cosmetics obscure safety controls.
+
+Done when: spend, ownership, refund, and loadout records reconcile and every item renders safely.
+
+### V2-P8: add invite rewards only after fraud/legal approval
+
+Goal: reward legitimate referrals without creating spam or account farming.
+
+Depends on: V2-P3, approved country/privacy terms, and anti-abuse capacity.
+
+Steps:
+
+1. Obtain product, legal/privacy, safety, support, and fraud approval.
+2. Define a qualified referral using verified adult accounts and meaningful activation, not signup alone.
+3. Add referral codes/tokens with expiry, one attribution, and no contact-list upload.
+4. Add device/network/payment abuse signals using privacy-approved coarse data.
+5. Delay reward until the qualification window completes.
+6. Cap rewards by inviter, invitee, device/network risk, and time period.
+7. Add reversal for fraud or deleted qualification events.
+8. Add clear user terms and an appeal/support route.
+9. Roll out to staff and a very small country cohort.
+
+Done when: measured legitimate acquisition value exceeds fraud, support, reward, and moderation cost.
+
+### V2-P9: evaluate and, if approved, integrate ads
+
+Goal: add optional ad revenue without placing ads inside private conversations or safety work.
+
+Depends on: written ad-provider acceptance, legal/privacy approval, consent tooling, and stable V2 core metrics.
+
+Steps:
+
+1. Give candidate providers the exact 18+ random text/video UGC product description and planned placements.
+2. Obtain written acceptance. If no provider accepts, mark ads `not_applicable` and ship V2 without them.
+3. Approve countries, consent basis, age treatment, data fields, retention, and opt-out/revocation behavior.
+4. Create a server-owned placement eligibility matrix.
+5. Deny ads on matching, active/recent conversation, direct messages/calls, report, block, auth, policy, billing interruption, and deletion surfaces.
+6. Ensure ad-free plans make no ad request; hiding a loaded ad is insufficient.
+7. Add frequency caps across tabs/sessions and a global provider kill switch.
+8. Reserve accessible layout space and label ads clearly.
+9. Keep profile, match, message, safety, and sensitive identifiers out of provider requests.
+10. Start with ordinary approved placements. Rewarded ads need a separate sub-gate: participation must be voluntary, the reward must be server-confirmed and idempotent, and no ad may interrupt or gate a conversation.
+11. Test consent decline/revoke, provider outage, cap races, navigation races, premium transitions, rewarded-ad replay, and every denied route.
+12. Start with a tiny eligible cohort and compare revenue with latency, retention, support, and safety impact.
+
+Done when: provider, legal/privacy, product, safety, and engineering approve the evidence and denied surfaces make zero ad requests.
+
+### V2-P10: pass V2 acceptance and expand gradually
+
+Goal: make V2 a measured release, not a collection of permanently half-enabled flags.
+
+Steps:
+
+1. Re-run V1 Gate A regression with all intended V2 features enabled in staging.
+2. Run ledger rebuild and source reconciliation at production-like scale.
+3. Run economy, quest, billing-grant, reputation, cosmetic, referral, and optional ad abuse suites.
+4. Complete privacy/export/deletion tests for all new V2 records.
+5. Complete accessibility and independent security review of new public/admin surfaces.
+6. Confirm alerts, budgets, worker capacity, support scripts, moderation effects, and kill switches.
+7. Roll out by feature, country, and percentage. Do not enable every V2 feature at once.
+8. Hold each step for its approved observation window.
+9. Expand, hold, or disable based on conversation quality, safety, retention, cost, support, and ledger correctness.
+10. Record final product, safety, privacy/legal, finance, support, and engineering approval.
+
+Done when: the approved V2 feature set completes its observation period without an open severity-one incident, critical/high security issue, ledger mismatch, or breached safety/cost threshold.
+
+## 9. V2 test matrix
+
+Every V2 implementation must cover the relevant rows below.
+
+### Ledger and concurrency
+
+- duplicate and out-of-order source events;
+- concurrent reward and reversal;
+- worker retry after partial dependency failure;
+- rebuild during new writes;
+- double claim, double spend, and refund race;
+- large integer and boundary values;
+- version change and replay;
+- stale summary detection and repair.
+
+### Abuse and fairness
+
+- repeated peer farming and closed rating rings;
+- many accounts on one device/network risk group;
+- rapid short conversations;
+- collusive quests and referrals;
+- report/block used as a reward strategy;
+- paid-plan transitions timed around grants;
+- reputation brigading and sparse samples;
+- free-user outcomes compared with paid cohorts.
+
+### Authorization and privacy
+
+- IDOR across ledgers, quests, cosmetics, referrals, and admin diagnostics;
+- client-forged amounts, levels, claims, prices, plan keys, and eligibility;
+- deleted, suspended, sanctioned, minor, or wrong-country accounts;
+- export scope and cross-user leakage;
+- deletion/anonymization/legal-hold behavior;
+- log/analytics redaction;
+- unsafe cosmetic assets and reserved trust signals;
+- ad requests on every prohibited route.
+
+### Failure and rollback
+
+- PostgreSQL, Redis, worker, Stripe, monitoring, and optional ad-provider outage;
+- disabled/missing/malformed feature flags;
+- kill switch during active processing;
+- bad rule or curve version;
+- migration rollback/forward-fix compatibility;
+- shadow/live mismatch;
+- support repair without direct balance editing.
+
+## 10. V2 rollout gates
+
+### V2 Gate 1: foundation integrity
+
+- All V2-N migrations and tests pass.
+- Flags default off and kill switches work.
+- Ledgers rebuild exactly.
+- No V1 regression exists.
+
+### V2 Gate 2: shadow confidence
+
+- Real event capture reconciles with source records.
+- Duplicate/loss/mismatch rates meet approved thresholds.
+- Reputation remains powerless and private.
+- Privacy and monitoring owners approve the event boundary.
+
+### V2 Gate 3: limited live economy
+
+- Versioned reward rules and curve are approved.
+- Staff and invited cohort ledgers reconcile.
+- Farming, support, safety, and cost remain inside thresholds.
+- Rollback uses flags and reversals, not row edits.
+
+### V2 Gate 4: engagement and plan benefits
+
+- Quests/streaks do not reduce conversation quality.
+- Subscription grants pass every billing transition.
+- Reputation effects pass fairness, explanation, and appeal review.
+- Cosmetics pass security/accessibility review.
+
+### V2 Gate 5: optional monetization expansion
+
+- Referral rewards have fraud/legal approval.
+- Ads have written provider and privacy/legal approval, or are marked not applicable.
+- Denied surfaces make no ad request.
+- Full V2 acceptance and observation windows pass.
+
+## 11. Progress ledger
+
+Update this table, not the body of completed task definitions.
+
+### V1 release track
+
+| Item                 | Status      | Evidence or next action                                             |
+| -------------------- | ----------- | ------------------------------------------------------------------- |
+| Agent implementation | complete    | Tasks 0-21 audited; Task 16 remains conditional on H14              |
+| Human runbook        | not_started | Begin Phase 1 in `human-v1.md`                                      |
+| Gate A               | not_started | Run internal alpha after required provider setup                    |
+| Gate B               | blocked     | Requires Gate A, production operations, and closed-beta observation |
+| Gate C               | blocked     | Requires Gate B and launch thresholds                               |
+| Gate D               | blocked     | Repeated post-V1 country expansion                                  |
+
+### V2 foundation, wait until V1 completion
+
+| Chunk                               | Status  | Blocker                                      |
+| ----------------------------------- | ------- | -------------------------------------------- |
+| V2-N0 start from accepted main      | blocked | V1 completion gate in section 5              |
+| V2-N1 rollout controls              | blocked | N0                                           |
+| V2-N2 immutable schemas             | blocked | N0                                           |
+| V2-N3 ledger service                | blocked | N2                                           |
+| V2-N4 level curve                   | blocked | N2-N3                                        |
+| V2-N5 progression events            | blocked | N0; synthetic until shadow approval          |
+| V2-N6 reputation shadow             | blocked | N5                                           |
+| V2-N7 quest/streak foundation       | blocked | N3 and N5                                    |
+| V2-N8 subscription-grant foundation | blocked | N3                                           |
+| V2-N9 cosmetic ownership            | blocked | N0; no store or live grant during foundation |
+| V2-N10 diagnostics/tests            | blocked | N1-N9                                        |
+
+### V2 integration and rollout
+
+| Chunk                       | Status  | Blocker                                     |
+| --------------------------- | ------- | ------------------------------------------- |
+| V2-P0 foundation acceptance | blocked | N1-N10                                      |
+| V2-P1 real shadow events    | blocked | P0                                          |
+| V2-P2 economy calibration   | blocked | P1 evidence and human approvals             |
+| V2-P3 live points/XP/levels | blocked | P2                                          |
+| V2-P4 quests/streaks        | blocked | P3                                          |
+| V2-P5 subscription grants   | blocked | P3 and stable billing                       |
+| V2-P6 reputation effects    | blocked | Shadow/fairness/appeal approval             |
+| V2-P7 cosmetic spending     | blocked | P3 and safe catalog approval                |
+| V2-P8 invite rewards        | blocked | Fraud/legal/privacy approval                |
+| V2-P9 ads                   | blocked | Written provider and legal/privacy approval |
+| V2-P10 V2 acceptance        | blocked | Intended P3-P9 set complete                 |
+
+## 12. Short change log
+
+Keep at most ten current entries. Move older detail to Git history or an ADR.
+
+- July 13, 2026: rewrote this plan after V1 code-gap closure; removed obsolete inventories, duplicated human instructions, and agent diaries.
+- July 13, 2026: stopped parallel V2 work. V2 now starts only after the V1 completion gate and is implemented directly on the normal `main` codebase.
+- July 13, 2026: V1 verification passed formatting, lint, typecheck, 73 tests, 11 migration validations, secret scans, all builds, and eight browser E2E cases.
+- July 13, 2026: created the ordered H1-H19 operator runbook in `human-v1.md`.

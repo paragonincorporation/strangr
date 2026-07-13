@@ -18,7 +18,7 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import { api, supabase, useAuth } from "./auth.js";
+import { api, ApiError, supabase, useAuth } from "./auth.js";
 import { useCallUi } from "./call-store.js";
 import { RouteState } from "./components/route-state.js";
 import { MediaManager, type MediaQualityPolicy } from "./media.js";
@@ -1819,11 +1819,13 @@ export function ConversationPage() {
     avatarUrl: string | null;
   }>();
   const matchIdRef = useRef<string | undefined>(undefined);
+  const connectedAtRef = useRef<number | null>(null);
   const [messages, setMessages] = useState<
     Array<{ id: string; text: string; mine: boolean }>
   >([]);
   const [draft, setDraft] = useState("");
   const [permissionError, setPermissionError] = useState(permissionDenied);
+  const [betaFull, setBetaFull] = useState(false);
   const [skipAllowedAt, setSkipAllowedAt] = useState<number | null>(null);
   const [clock, setClock] = useState(() => Date.now());
   const localVideo = useRef<HTMLVideoElement>(null);
@@ -1853,6 +1855,8 @@ export function ConversationPage() {
           );
           const connected = event.payload.connectedAt;
           if (typeof connected === "string")
+            connectedAtRef.current = new Date(connected).getTime();
+          if (typeof connected === "string")
             setRatingEligibleAt(new Date(connected).getTime() + 120_000);
         } else if (event.type === "session.timer") {
           const eligible = event.payload.ratingEligibleAt;
@@ -1878,6 +1882,17 @@ export function ConversationPage() {
           }
           setToast(String(event.payload.message));
         } else if (event.type === "match.ended") {
+          if (connectedAtRef.current)
+            void api("/v1/telemetry/events", {
+              method: "POST",
+              body: JSON.stringify({
+                event: "call.duration_seconds",
+                value: Math.max(
+                  0,
+                  (Date.now() - connectedAtRef.current) / 1000,
+                ),
+              }),
+            }).catch(() => undefined);
           setEndedEncounterId(String(event.payload.matchId));
           teardown();
           call.setStatus("ended");
@@ -1936,11 +1951,13 @@ export function ConversationPage() {
         allowPreferenceRelaxation: preference.allowPreferenceRelaxation,
       });
     };
-    void start().catch((error) =>
+    void start().catch((error) => {
+      if (error instanceof ApiError && error.code === "capacity_full")
+        setBetaFull(true);
       setToast(
         error instanceof Error ? error.message : "Could not start matching",
-      ),
-    );
+      );
+    });
     return () => {
       active = false;
       client.stop();
@@ -1974,7 +1991,27 @@ export function ConversationPage() {
       ?.getTracks()
       .forEach((track) => connection.addTrack(track, media.current.stream!));
     await media.current.applyPolicy(connection, media.current.policy);
-    media.current.monitor(connection, setToast);
+    media.current.monitor(
+      connection,
+      setToast,
+      () =>
+        void api("/v1/telemetry/events", {
+          method: "POST",
+          body: JSON.stringify({ event: "turn.relay" }),
+        }).catch(() => undefined),
+    );
+    connection.onconnectionstatechange = () => {
+      if (connection.connectionState === "connected")
+        void api("/v1/telemetry/events", {
+          method: "POST",
+          body: JSON.stringify({ event: "webrtc.connected" }),
+        }).catch(() => undefined);
+      else if (connection.connectionState === "failed")
+        void api("/v1/telemetry/events", {
+          method: "POST",
+          body: JSON.stringify({ event: "webrtc.failed" }),
+        }).catch(() => undefined);
+    };
     connection.ontrack = (event) => {
       if (remoteVideo.current)
         remoteVideo.current.srcObject = event.streams[0] ?? null;
@@ -2029,6 +2066,7 @@ export function ConversationPage() {
     peer.current?.close();
     peer.current = null;
     matchIdRef.current = undefined;
+    connectedAtRef.current = null;
     if (localVideo.current) localVideo.current.srcObject = null;
     if (remoteVideo.current) remoteVideo.current.srcObject = null;
     setMatchId(undefined);
@@ -2158,6 +2196,19 @@ export function ConversationPage() {
           <Button onClick={() => call.setMode("text")} size="small">
             Use text instead
           </Button>
+        </Card>
+      ) : null}
+      {betaFull ? (
+        <Card className="permission-banner" role="alert">
+          <div>
+            <strong>This beta is full right now.</strong>
+            <p>
+              Paramingle is limiting simultaneous conversations for safety and
+              reliability. Nothing is wrong with your account; please try again
+              later.
+            </p>
+          </div>
+          <Link to="/app">Return home</Link>
         </Card>
       ) : null}
       <section

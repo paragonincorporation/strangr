@@ -21,6 +21,15 @@ export class Observability {
   increment(name: string, value = 1) {
     this.counters.set(name, (this.counters.get(name) ?? 0) + value);
   }
+  observe(name: string, value: number) {
+    if (!Number.isFinite(value) || value < 0) return;
+    this.increment(`${name}.count`);
+    this.increment(`${name}.sum`, value);
+    this.counters.set(
+      `${name}.max`,
+      Math.max(this.counters.get(`${name}.max`) ?? 0, value),
+    );
+  }
   snapshot() {
     return Object.fromEntries(this.counters);
   }

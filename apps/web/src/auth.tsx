@@ -68,6 +68,16 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   }
   return children;
 }
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly code: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
 export async function api<T>(path: string, options: RequestInit = {}) {
   if (!supabase) throw new Error("Supabase browser configuration is missing");
   const { data } = await supabase.auth.getSession();
@@ -85,9 +95,13 @@ export async function api<T>(path: string, options: RequestInit = {}) {
   });
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {
-      error?: { message?: string };
+      error?: { code?: string; message?: string };
     } | null;
-    throw new Error(body?.error?.message ?? "Request failed");
+    throw new ApiError(
+      body?.error?.message ?? "Request failed",
+      body?.error?.code ?? "request_failed",
+      response.status,
+    );
   }
   return (response.status === 204 ? undefined : await response.json()) as T;
 }

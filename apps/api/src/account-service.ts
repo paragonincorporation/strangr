@@ -211,6 +211,17 @@ export class AccountService {
   async onboarding(userId: string, input: OnboardingRequest, now = new Date()) {
     await this.db.transaction(async (tx) => {
       if (input.step === "birth_date") {
+        const [existing] = await tx
+          .select({ ciphertext: users.birthDateCiphertext })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+        if (existing?.ciphertext)
+          throw new DomainError(
+            "conflict",
+            "Date of birth has already been recorded",
+            409,
+          );
         requireAdultBirthDate(input.birthDate, now);
         const encrypted = this.encryptor.encrypt(input.birthDate);
         await tx
@@ -422,6 +433,7 @@ export class AccountService {
         emailVerified: users.emailVerified,
         sessionId: userSessions.id,
         revokedAt: userSessions.revokedAt,
+        country: userCountryState.lastObservedCountry,
       })
       .from(users)
       .innerJoin(
@@ -431,6 +443,7 @@ export class AccountService {
           eq(userSessions.authSessionId, authSessionId),
         ),
       )
+      .innerJoin(userCountryState, eq(userCountryState.userId, users.id))
       .where(eq(users.id, userId))
       .limit(1);
     if (!row || row.revokedAt)
@@ -445,7 +458,12 @@ export class AccountService {
         "Account is not eligible for realtime contact",
         403,
       );
-    return { userId: row.userId, sessionId: row.sessionId, cohort: row.cohort };
+    return {
+      userId: row.userId,
+      sessionId: row.sessionId,
+      cohort: row.cohort,
+      country: row.country,
+    };
   }
   async profile(viewerId: string, username: string) {
     const [p] = await this.db

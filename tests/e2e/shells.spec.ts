@@ -41,6 +41,6 @@ test("admin remains a separate surface", async ({ page }) => {
     page.getByRole("heading", { name: "Admin access." }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Continue to MFA" }),
+    page.getByRole("button", { name: "Open restricted workspace" }),
   ).toBeDisabled();
 });

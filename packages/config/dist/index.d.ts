@@ -26,6 +26,7 @@ declare const commonServerSchema: z.ZodObject<{
     SUPABASE_JWT_AUDIENCE: z.ZodString;
     SUPABASE_JWKS_URL: z.ZodURL;
     SUPABASE_STORAGE_BUCKET: z.ZodString;
+    SUPABASE_PRIVACY_EXPORT_BUCKET: z.ZodString;
     SUPABASE_SERVICE_ROLE_KEY: z.ZodString;
     CURRENT_TERMS_VERSION: z.ZodString;
     CURRENT_PRIVACY_VERSION: z.ZodString;
@@ -46,6 +47,8 @@ declare const commonServerSchema: z.ZodObject<{
     }>>, z.ZodTransform<boolean, "true" | "false">>;
     MESSAGE_DELETE_FOR_EVERYONE_SECONDS: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
     DIRECT_CALL_RING_SECONDS: z.ZodDefault<z.ZodCoercedNumber<unknown>>;
+    GLOBAL_CONCURRENCY_CEILING: z.ZodCoercedNumber<unknown>;
+    COUNTRY_CONCURRENCY_CEILINGS: z.ZodPipe<z.ZodString, z.ZodTransform<Record<string, number>, string>>;
     COUNTRY_HEADER_NAME: z.ZodDefault<z.ZodString>;
     LOCAL_COUNTRY_CODE: z.ZodDefault<z.ZodString>;
 }, z.core.$strip>;

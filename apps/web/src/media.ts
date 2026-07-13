@@ -110,6 +110,7 @@ export class MediaManager {
   monitor(
     connection: RTCPeerConnection,
     onDiagnostic: (message: string) => void,
+    onRelay?: () => void,
   ) {
     this.stopMonitoring();
     const sample = async () => {
@@ -158,6 +159,7 @@ export class MediaManager {
               ? "Quality adapted for a relayed connection."
               : "Quality adapted to current network conditions.",
           );
+          if (relay) onRelay?.();
         }
       } catch {
         /* getStats is best-effort across browsers */

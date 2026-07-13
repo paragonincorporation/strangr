@@ -35,7 +35,7 @@ const privacy = new PrivacyService(
   db,
   new SupabaseStorage(
     config.SUPABASE_URL,
-    config.SUPABASE_STORAGE_BUCKET,
+    config.SUPABASE_PRIVACY_EXPORT_BUCKET,
     config.SUPABASE_SERVICE_ROLE_KEY,
   ),
 );
@@ -52,11 +52,23 @@ console.info(
 );
 
 const run = async (): Promise<boolean> => {
+  const startedAt = Date.now();
   try {
     const lease = await pool.query<{ acquired: boolean }>(
       "select pg_try_advisory_lock(74213912) as acquired",
     );
-    if (!lease.rows[0]?.acquired) return true;
+    if (!lease.rows[0]?.acquired) {
+      console.info(
+        JSON.stringify({
+          service: "paramingle-worker",
+          event: "retention-skipped",
+          reason: "lease_unavailable",
+          durationMs: Date.now() - startedAt,
+          timestamp: new Date().toISOString(),
+        }),
+      );
+      return true;
+    }
     const abandonedAvatarUploads = await avatars.cleanup();
     const encounterRetention = await encounters.cleanupExpired(
       500,
@@ -91,6 +103,7 @@ const run = async (): Promise<boolean> => {
         expiredSanctions: expiredSanctions.length,
         reconciledSubscriptions,
         privacyRetention,
+        durationMs: Date.now() - startedAt,
         timestamp: new Date().toISOString(),
       }),
     );
@@ -105,6 +118,8 @@ const run = async (): Promise<boolean> => {
         service: "paramingle-worker",
         event: "retention-failed",
         message: error instanceof Error ? error.message : "unknown",
+        durationMs: Date.now() - startedAt,
+        timestamp: new Date().toISOString(),
       }),
     );
     return false;

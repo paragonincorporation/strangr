@@ -74,8 +74,15 @@ export class BillingRepository {
   }
   async applySubscription(update) {
     const existing = await this.subscriptionForUser(update.userId);
-    if (existing && existing.lastProcessedObjectAt > update.objectCreatedAt)
-      return false;
+    if (existing) {
+      if (existing.lastProcessedObjectAt > update.objectCreatedAt) return false;
+      if (
+        existing.lastProcessedObjectAt.getTime() ===
+          update.objectCreatedAt.getTime() &&
+        revocationRank(existing.status) >= revocationRank(update.status)
+      )
+        return false;
+    }
     await this.db
       .insert(subscriptions)
       .values({
@@ -144,4 +151,10 @@ export class BillingRepository {
       .set({ lastReconciledAt: new Date() })
       .where(eq(subscriptions.stripeSubscriptionId, subscriptionId));
   }
+}
+function revocationRank(status) {
+  if (status === "canceled" || status === "unpaid") return 3;
+  if (status === "paused" || status === "incomplete") return 2;
+  if (status === "past_due") return 1;
+  return 0;
 }

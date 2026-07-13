@@ -1,6 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import type { Database } from "./client.js";
 import {
   blocks,
   callParticipants,
@@ -13,19 +12,15 @@ import {
   threads,
   users,
 } from "./schema.js";
-
 const MAX_MESSAGE_LENGTH = 2_000;
 const CALL_RETENTION_MS = 90 * 24 * 60 * 60 * 1_000;
-type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
-
-function cleanMessage(body: string) {
+function cleanMessage(body) {
   const value = body.normalize("NFC").trim();
   if (!value || [...value].length > MAX_MESSAGE_LENGTH)
     throw new Error("invalid_message");
   return value;
 }
-
-async function directAccess(tx: Tx, userId: string, threadId: string) {
+async function directAccess(tx, userId, threadId) {
   const other = alias(threadMembers, "other_member");
   const [row] = await tx
     .select({ otherUserId: other.userId })
@@ -78,11 +73,12 @@ async function directAccess(tx: Tx, userId: string, threadId: string) {
   if (blocked) throw new Error("relationship_unavailable");
   return row;
 }
-
 export class CommunicationRepository {
-  constructor(private readonly db: Database) {}
-
-  async listThreads(userId: string, cursor?: string, limit = 20) {
+  db;
+  constructor(db) {
+    this.db = db;
+  }
+  async listThreads(userId, cursor, limit = 20) {
     const before = cursor
       ? Number(Buffer.from(cursor, "base64url").toString("utf8"))
       : Number.MAX_SAFE_INTEGER;
@@ -94,8 +90,8 @@ export class CommunicationRepository {
         username: profiles.username,
         displayName: profiles.displayName,
         readSequence: threadMembers.readSequence,
-        lastSequence: sql<number>`coalesce(max(${messages.serverSequence}),0)::bigint`,
-        lastMessageAt: sql<Date>`coalesce(max(${messages.sentAt}),${threads.createdAt})`,
+        lastSequence: sql`coalesce(max(${messages.serverSequence}),0)::bigint`,
+        lastMessageAt: sql`coalesce(max(${messages.sentAt}),${threads.createdAt})`,
       })
       .from(threads)
       .innerJoin(
@@ -150,19 +146,13 @@ export class CommunicationRepository {
       items,
       nextCursor:
         rows.length > limit
-          ? Buffer.from(String(rows[limit - 1]!.lastSequence)).toString(
+          ? Buffer.from(String(rows[limit - 1].lastSequence)).toString(
               "base64url",
             )
           : null,
     };
   }
-
-  async messages(
-    userId: string,
-    threadId: string,
-    beforeSequence?: number,
-    limit = 50,
-  ) {
+  async messages(userId, threadId, beforeSequence, limit = 50) {
     return this.db.transaction(async (tx) => {
       await directAccess(tx, userId, threadId);
       const rows = await tx
@@ -193,18 +183,11 @@ export class CommunicationRepository {
           .reverse()
           .map((row) => ({ ...row, body: row.deletedAt ? null : row.body })),
         nextCursor:
-          rows.length > limit ? String(rows[limit - 1]!.sequence) : null,
+          rows.length > limit ? String(rows[limit - 1].sequence) : null,
       };
     });
   }
-
-  async send(
-    userId: string,
-    threadId: string,
-    clientMessageId: string,
-    body: string,
-    now = new Date(),
-  ) {
+  async send(userId, threadId, clientMessageId, body, now = new Date()) {
     const clean = cleanMessage(body);
     return this.db.transaction(async (tx) => {
       const access = await directAccess(tx, userId, threadId);
@@ -228,7 +211,7 @@ export class CommunicationRepository {
       }
       const [sequence] = await tx
         .select({
-          value: sql<number>`coalesce(max(${messages.serverSequence}),0)+1`,
+          value: sql`coalesce(max(${messages.serverSequence}),0)+1`,
         })
         .from(messages)
         .where(eq(messages.threadId, threadId));
@@ -239,16 +222,15 @@ export class CommunicationRepository {
           senderId: userId,
           type: "direct",
           clientMessageId,
-          serverSequence: Number(sequence!.value),
+          serverSequence: Number(sequence.value),
           body: clean,
           sentAt: now,
         })
         .returning();
-      return { ...created!, recipientId: access.otherUserId };
+      return { ...created, recipientId: access.otherUserId };
     });
   }
-
-  async markRead(userId: string, threadId: string, sequence: number) {
+  async markRead(userId, threadId, sequence) {
     return this.db.transaction(async (tx) => {
       await directAccess(tx, userId, threadId);
       const [last] = await tx
@@ -278,12 +260,11 @@ export class CommunicationRepository {
       return updated?.value ?? 0;
     });
   }
-
   async deleteMessage(
-    userId: string,
-    messageId: string,
-    everyone: boolean,
-    deleteWindowMs: number,
+    userId,
+    messageId,
+    everyone,
+    deleteWindowMs,
     now = new Date(),
   ) {
     return this.db.transaction(async (tx) => {
@@ -300,7 +281,7 @@ export class CommunicationRepository {
           .insert(messageHiddenFor)
           .values({ messageId, userId, hiddenAt: now })
           .onConflictDoNothing();
-        return { deletedFor: "me" as const };
+        return { deletedFor: "me" };
       }
       if (
         message.senderId !== userId ||
@@ -311,23 +292,16 @@ export class CommunicationRepository {
         .update(messages)
         .set({ body: null, deletedForEveryoneAt: now })
         .where(eq(messages.id, messageId));
-      return { deletedFor: "everyone" as const, deletedAt: now };
+      return { deletedFor: "everyone", deletedAt: now };
     });
   }
-
-  async unreadCount(userId: string) {
-    const result = await this.db.execute<{ count: number }>(
+  async unreadCount(userId) {
+    const result = await this.db.execute(
       sql`select coalesce(sum(greatest(last_sequence-tm.read_sequence,0)),0)::int count from thread_members tm join friendships f on f.thread_id=tm.thread_id and f.state='active' join lateral (select coalesce(max(m.server_sequence),0) last_sequence from messages m where m.thread_id=tm.thread_id and m.sender_id<>${userId}) x on true where tm.user_id=${userId}`,
     );
     return result.rows[0]?.count ?? 0;
   }
-
-  async createCall(
-    callerId: string,
-    friendId: string,
-    mode: "voice" | "video",
-    now = new Date(),
-  ) {
+  async createCall(callerId, friendId, mode, now = new Date()) {
     if (callerId === friendId) throw new Error("call_unavailable");
     return this.db.transaction(async (tx) => {
       const [friendship] = await tx
@@ -364,19 +338,13 @@ export class CommunicationRepository {
         })
         .returning();
       await tx.insert(callParticipants).values([
-        { callId: call!.id, userId: callerId, result: "inviting" },
-        { callId: call!.id, userId: friendId, result: "ringing" },
+        { callId: call.id, userId: callerId, result: "inviting" },
+        { callId: call.id, userId: friendId, result: "ringing" },
       ]);
-      return { ...call!, callerId, recipientId: friendId };
+      return { ...call, callerId, recipientId: friendId };
     });
   }
-
-  async callAction(
-    userId: string,
-    callId: string,
-    action: "accept" | "reject" | "cancel" | "end",
-    now = new Date(),
-  ) {
+  async callAction(userId, callId, action, now = new Date()) {
     return this.db.transaction(async (tx) => {
       const [call] = await tx
         .select()
@@ -436,15 +404,14 @@ export class CommunicationRepository {
         callId,
         state,
         threadId: call.calls.threadId,
-        peerId: peer!.userId,
+        peerId: peer.userId,
       };
     });
   }
-
   async terminateDirectCallForBlock(
-    callId: string,
-    firstUserId: string,
-    secondUserId: string,
+    callId,
+    firstUserId,
+    secondUserId,
     now = new Date(),
   ) {
     const ended = await this.db
@@ -465,8 +432,7 @@ export class CommunicationRepository {
       .returning({ id: calls.id });
     return ended.length === 1;
   }
-
-  async authorizeCall(userId: string, callId: string) {
+  async authorizeCall(userId, callId) {
     return this.db.transaction(async (tx) => {
       const [call] = await tx
         .select({ threadId: calls.threadId, state: calls.state })
@@ -486,8 +452,7 @@ export class CommunicationRepository {
       return { peerId: access.otherUserId, state: call.state };
     });
   }
-
-  async expireCall(callId: string, now = new Date()) {
+  async expireCall(callId, now = new Date()) {
     const [row] = await this.db
       .update(calls)
       .set({ state: "missed", endedAt: now, completionReason: "missed" })
@@ -500,8 +465,7 @@ export class CommunicationRepository {
       .returning({ id: calls.id });
     return Boolean(row);
   }
-
-  async expireUnanswered(ringSeconds: number, limit = 500, now = new Date()) {
+  async expireUnanswered(ringSeconds, limit = 500, now = new Date()) {
     const cutoff = new Date(now.getTime() - ringSeconds * 1_000);
     const rows = await this.db
       .update(calls)
@@ -524,7 +488,6 @@ export class CommunicationRepository {
       .returning({ id: calls.id });
     return rows.length;
   }
-
   async cleanupCalls(limit = 500, now = new Date(), dryRun = false) {
     const rows = await this.db
       .select({ id: calls.id })

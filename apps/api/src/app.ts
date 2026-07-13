@@ -161,7 +161,7 @@ export function createApp(options: CreateAppOptions = {}) {
       connection!.db,
       new SupabaseStorage(
         config.SUPABASE_URL,
-        config.SUPABASE_STORAGE_BUCKET,
+        config.SUPABASE_PRIVACY_EXPORT_BUCKET,
         config.SUPABASE_SERVICE_ROLE_KEY,
       ),
     );
@@ -271,6 +271,11 @@ export function createApp(options: CreateAppOptions = {}) {
       "Content-Security-Policy",
       "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'",
     );
+    if (config.NODE_ENV === "production")
+      reply.header(
+        "Strict-Transport-Security",
+        "max-age=31536000; includeSubDomains",
+      );
     return payload;
   });
   app.addHook("onResponse", async (request, reply) => {
@@ -302,7 +307,11 @@ export function createApp(options: CreateAppOptions = {}) {
   if (config.OPENAPI_ENABLED && config.NODE_ENV !== "production")
     void app.register(swaggerUi, { routePrefix: "/documentation" });
 
-  app.get("/health/live", {}, () => ({ ok: true }));
+  app.get("/health/live", {}, () => ({
+    ok: true,
+    environment: config.DEPLOYMENT_ENVIRONMENT,
+    revision: config.DEPLOYMENT_REVISION,
+  }));
 
   const authenticate = async (request: FastifyRequest, reply: FastifyReply) => {
     const header = request.headers.authorization;
@@ -480,12 +489,22 @@ export function createApp(options: CreateAppOptions = {}) {
           .send(error("forbidden", "Admin permission required", request.id));
       }
     };
-  app.get("/health/metrics", { preHandler: adminGuard("admin") }, () => ({
+  app.get("/health/metrics", { preHandler: adminGuard("admin") }, async () => ({
     tags: {
       environment: config.DEPLOYMENT_ENVIRONMENT,
       revision: config.DEPLOYMENT_REVISION,
     },
     counters: observability.snapshot(),
+    dependencies: {
+      postgres: connection
+        ? {
+            total: connection.pool.totalCount,
+            idle: connection.pool.idleCount,
+            waiting: connection.pool.waitingCount,
+          }
+        : null,
+      redisMemoryBytes: await realtime.redisMemoryBytes().catch(() => null),
+    },
   }));
   const route =
     <T>(
@@ -626,9 +645,16 @@ export function createApp(options: CreateAppOptions = {}) {
         const signature = Array.isArray(req.headers["stripe-signature"])
           ? req.headers["stripe-signature"][0]
           : req.headers["stripe-signature"];
+        const started = Date.now();
         await billing.webhook(req.rawBody as Buffer, signature);
+        observability.increment("billing.webhook.processed");
+        observability.observe(
+          "billing.webhook.duration_ms",
+          Date.now() - started,
+        );
         return reply.code(200).send({ received: true });
       } catch {
+        observability.increment("billing.webhook.rejected");
         return reply
           .code(400)
           .send(error("bad_request", "Webhook rejected", req.id));
@@ -797,7 +823,7 @@ export function createApp(options: CreateAppOptions = {}) {
   );
   app.post(
     "/v1/privacy/delete/cancel",
-    { preHandler: guard("inspect_self") },
+    { preHandler: authenticate },
     async (req, reply) => {
       try {
         requireRecentReauthentication(req);
@@ -818,7 +844,33 @@ export function createApp(options: CreateAppOptions = {}) {
           req.auth!.user.id,
           req.auth!.identity.authSessionId,
         );
-        return await realtime.createTicket(identity);
+        const countryCeiling = identity.country
+          ? config.COUNTRY_CONCURRENCY_CEILINGS[identity.country]
+          : undefined;
+        if (!countryCeiling)
+          throw new DomainError(
+            "capacity_full",
+            "The beta is currently full in your country. Please try again later.",
+            503,
+          );
+        try {
+          const ticket = await realtime.createTicket(identity, 30, {
+            global: config.GLOBAL_CONCURRENCY_CEILING,
+            country: countryCeiling,
+          });
+          observability.increment("realtime.ticket.issued");
+          return ticket;
+        } catch (cause) {
+          if (cause instanceof Error && cause.message === "capacity_full") {
+            observability.increment("capacity.rejected");
+            throw new DomainError(
+              "capacity_full",
+              "The beta is currently full. Please try again later.",
+              503,
+            );
+          }
+          throw cause;
+        }
       } catch (cause) {
         return domainReply(reply, req.id, cause);
       }
@@ -997,6 +1049,7 @@ export function createApp(options: CreateAppOptions = {}) {
           req.auth!.user.id,
           input.outcome,
         );
+        observability.increment(`rating.${input.outcome}`);
         await realtime.publishUser(
           req.auth!.user.id,
           JSON.stringify(
@@ -1168,8 +1221,13 @@ export function createApp(options: CreateAppOptions = {}) {
         input.userId,
         input.reasonCategory,
       );
+      observability.increment("safety.block");
       await engagement.revokePair(req.auth!.user.id, input.userId);
       const activeMatch = await realtime.activeMatchBetween(
+        req.auth!.user.id,
+        input.userId,
+      );
+      const activeDirectCall = await realtime.activeDirectCallBetween(
         req.auth!.user.id,
         input.userId,
       );
@@ -1188,6 +1246,24 @@ export function createApp(options: CreateAppOptions = {}) {
               payload: { matchId: activeMatch.id, reason: "blocked" },
             }),
           );
+      }
+      if (activeDirectCall) {
+        await communications.terminateDirectCallForBlock(
+          activeDirectCall.callId,
+          req.auth!.user.id,
+          input.userId,
+        );
+        const event = JSON.stringify({
+          version: PROTOCOL_VERSION,
+          type: "call.ended",
+          requestId: randomUUID(),
+          payload: { callId: activeDirectCall.callId },
+        });
+        await Promise.all(
+          [activeDirectCall.callerId, activeDirectCall.recipientId].map(
+            (userId) => realtime.publishUser(userId, event),
+          ),
+        );
       }
       return { id: created.id, createdAt: created.createdAt.toISOString() };
     }),
@@ -1562,6 +1638,7 @@ export function createApp(options: CreateAppOptions = {}) {
           429,
         );
       const report = await moderation.createReport(req.auth!.user.id, input);
+      observability.increment("safety.report");
       if (input.leaveAfterSubmit) {
         if (input.encounterId)
           await realtime.closeMatch(input.encounterId, req.auth!.user.id);
@@ -1579,6 +1656,26 @@ export function createApp(options: CreateAppOptions = {}) {
   );
   app.get("/v1/sanctions/me", { preHandler: authenticate }, (req) =>
     moderation.mySanctions(req.auth!.user.id),
+  );
+  app.post(
+    "/v1/telemetry/events",
+    { preHandler: guard("contact") },
+    route(
+      z.object({
+        event: z.enum([
+          "webrtc.connected",
+          "webrtc.failed",
+          "turn.relay",
+          "call.duration_seconds",
+        ]),
+        value: z.number().nonnegative().max(86_400).optional(),
+      }),
+      (_req, input) => {
+        if (input.value === undefined) observability.increment(input.event);
+        else observability.observe(input.event, input.value);
+        return Promise.resolve({ accepted: true });
+      },
+    ),
   );
   app.post(
     "/v1/appeals",
@@ -1825,8 +1922,11 @@ export function createApp(options: CreateAppOptions = {}) {
       identity: RealtimeIdentity,
     ) => {
       const connectionId = randomUUID();
+      observability.increment("websocket.opened");
       localSockets.set(`${identity.userId}:${connectionId}`, socket);
-      void realtime.bindConnection(identity, connectionId);
+      void realtime
+        .bindConnection(identity, connectionId)
+        .catch(() => socket.close(1013, "Realtime dependency unavailable"));
       void publishPresence(
         friends,
         realtime,
@@ -1901,6 +2001,7 @@ export function createApp(options: CreateAppOptions = {}) {
           engagement,
           accounts,
           entitlements,
+          observability,
         )
           .then(async (messages) => {
             for (const item of messages)
@@ -1932,6 +2033,7 @@ export function createApp(options: CreateAppOptions = {}) {
           );
       });
       socket.on("close", () => {
+        observability.increment("websocket.closed");
         clearInterval(heartbeat);
         localSockets.delete(`${identity.userId}:${connectionId}`);
         void realtime.unbindConnection(identity, connectionId);
@@ -2037,9 +2139,11 @@ async function handleRealtime(
   engagement: EngagementRepository,
   accounts: AccountService,
   entitlements: EntitlementService,
+  observability: Observability,
 ): Promise<Outbound[]> {
   if (event.type === "connection.ping") return [];
   if (event.type === "match.join") {
+    observability.increment(`queue.join.${event.payload.mode}`);
     await launch.requireUser(identity.userId, "matching");
     if (await moderation.restriction(identity.userId, "matching"))
       throw new Error("capability_revoked");
@@ -2058,6 +2162,7 @@ async function handleRealtime(
       priority ? 2 : 1,
     );
     if (result.match) {
+      observability.increment(`match.found.${event.payload.mode}`);
       await encounters.start(result.match.id, result.match.mode, [
         result.match.first,
         result.match.second,
@@ -2144,6 +2249,7 @@ async function handleRealtime(
   if (event.type === "match.ack") {
     const connectedAt = await realtime.acknowledge(match.id, identity.userId);
     if (connectedAt) {
+      observability.increment(`match.connected.${match.mode}`);
       await encounters.connected(match.id);
       await engagement.markConnected(match.id, new Date(connectedAt));
     }
@@ -2155,7 +2261,7 @@ async function handleRealtime(
     const events = await Promise.all(
       [match.first, match.second].map(async (userId) => {
         const premium = await entitlements.has(userId, "media.premium_quality");
-        return [
+        const result: Outbound[] = [
           {
             userId,
             event: {
@@ -2211,6 +2317,25 @@ async function handleRealtime(
             },
           },
         ];
+        if (await entitlements.has(userId, "call_card.paid_override")) {
+          const access = await engagement.authorizeCallCard(match.id, userId);
+          result.push({
+            userId,
+            event: {
+              version: PROTOCOL_VERSION,
+              type: "session.identity_revealed",
+              requestId: event.requestId,
+              payload: {
+                matchId: match.id,
+                card: await accounts.safeCallCard(
+                  access.subjectId,
+                  access.revealSource,
+                ),
+              },
+            },
+          });
+        }
+        return result;
       }),
     );
     return events.flat();
@@ -2240,6 +2365,7 @@ async function handleRealtime(
   if (event.type === "match.leave" || event.type === "match.next") {
     if (event.type === "match.next" && match.mode === "text") {
       const cooldown = textSkipCooldown(match);
+      if (!cooldown.allowed) observability.increment("skip.early_rejected");
       if (!cooldown.allowed)
         return [
           {
@@ -2263,6 +2389,15 @@ async function handleRealtime(
         ];
     }
     await realtime.closeMatch(match.id, identity.userId);
+    observability.increment(`match.ended.${event.type}`);
+    if (match.connectedAt)
+      observability.observe(
+        "conversation.duration_seconds",
+        Math.max(
+          0,
+          (Date.now() - new Date(match.connectedAt).getTime()) / 1000,
+        ),
+      );
     await encounters.end(
       match.id,
       event.type === "match.next" ? "next" : "left",
@@ -2328,6 +2463,7 @@ async function handleRealtime(
     return ended;
   }
   if (event.type === "chat.send") {
+    observability.increment("random_chat.message");
     const repeated = await realtime.repeatedContent(
       `random-chat:${identity.userId}`,
       event.payload.text,

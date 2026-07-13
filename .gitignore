@@ -17,6 +17,18 @@ packages/database/dist/*
 !packages/database/dist/billing.d.ts
 !packages/database/dist/entitlements.js
 !packages/database/dist/entitlements.d.ts
+!packages/database/dist/social.js
+!packages/database/dist/social.d.ts
+!packages/database/dist/friends.js
+!packages/database/dist/friends.d.ts
+!packages/database/dist/communications.js
+!packages/database/dist/communications.d.ts
+!packages/database/dist/moderation.js
+!packages/database/dist/moderation.d.ts
+!packages/database/dist/launch.js
+!packages/database/dist/launch.d.ts
+!packages/database/dist/matching.js
+!packages/database/dist/matching.d.ts
 .vite/
 *.tsbuildinfo
 
@@ -41,3 +53,6 @@ Thumbs.db
 .cache/
 *.tmp
 *.temp
+.load-tokens.json
+artifacts/load/
+artifacts/rehearsals/

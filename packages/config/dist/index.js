@@ -37,6 +37,33 @@ const base64KeySchema = z.string().refine((value) => {
         return false;
     }
 }, "must be a base64-encoded 32-byte key");
+const countryCeilingsSchema = z.string().transform((value, context) => {
+    const result = {};
+    for (const item of value
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean)) {
+        const [country, rawLimit, ...extra] = item.split(":");
+        const limit = Number(rawLimit);
+        if (extra.length ||
+            !country ||
+            !/^[A-Z]{2}$/.test(country) ||
+            !Number.isInteger(limit) ||
+            limit < 1) {
+            context.addIssue({
+                code: "custom",
+                message: "must be comma-separated COUNTRY:positive-integer entries",
+            });
+            return z.NEVER;
+        }
+        result[country] = limit;
+    }
+    if (!Object.keys(result).length) {
+        context.addIssue({ code: "custom", message: "must not be empty" });
+        return z.NEVER;
+    }
+    return result;
+});
 const commonServerSchema = z.object({
     NODE_ENV: z
         .enum(["development", "test", "production"])
@@ -63,6 +90,7 @@ const commonServerSchema = z.object({
     SUPABASE_JWT_AUDIENCE: z.string().min(1),
     SUPABASE_JWKS_URL: z.url(),
     SUPABASE_STORAGE_BUCKET: z.string().min(1),
+    SUPABASE_PRIVACY_EXPORT_BUCKET: z.string().min(1),
     SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
     CURRENT_TERMS_VERSION: z.string().min(1).max(64),
     CURRENT_PRIVACY_VERSION: z.string().min(1).max(64),
@@ -96,6 +124,8 @@ const commonServerSchema = z.object({
         .min(10)
         .max(120)
         .default(30),
+    GLOBAL_CONCURRENCY_CEILING: z.coerce.number().int().min(1),
+    COUNTRY_CONCURRENCY_CEILINGS: countryCeilingsSchema,
     COUNTRY_HEADER_NAME: z
         .string()
         .regex(/^[a-z0-9-]+$/)
@@ -113,6 +143,7 @@ const localDefaults = {
     SUPABASE_JWT_AUDIENCE: "authenticated",
     SUPABASE_JWKS_URL: "http://127.0.0.1:54321/auth/v1/.well-known/jwks.json",
     SUPABASE_STORAGE_BUCKET: "avatars",
+    SUPABASE_PRIVACY_EXPORT_BUCKET: "privacy-exports",
     SUPABASE_SERVICE_ROLE_KEY: "local-service-role-placeholder",
     CURRENT_TERMS_VERSION: "beta-2026-07",
     CURRENT_PRIVACY_VERSION: "beta-2026-07",
@@ -130,6 +161,8 @@ const localDefaults = {
     OPENAPI_ENABLED: "true",
     MESSAGE_DELETE_FOR_EVERYONE_SECONDS: "900",
     DIRECT_CALL_RING_SECONDS: "30",
+    GLOBAL_CONCURRENCY_CEILING: "1000",
+    COUNTRY_CONCURRENCY_CEILINGS: "BD:1000",
     COUNTRY_HEADER_NAME: "x-paramingle-country",
     LOCAL_COUNTRY_CODE: "BD",
     WEB_ALLOWED_ORIGINS: "http://localhost:5173",
@@ -140,6 +173,11 @@ export function parseServerConfig(environment) {
     const normalized = {
         ...environment,
         API_PORT: environment.PORT ?? environment.API_PORT,
+        ...((environment.DEPLOYMENT_REVISION ?? environment.RENDER_GIT_COMMIT)
+            ? {
+                DEPLOYMENT_REVISION: environment.DEPLOYMENT_REVISION ?? environment.RENDER_GIT_COMMIT,
+            }
+            : {}),
     };
     const input = environment.NODE_ENV === "production"
         ? normalized
@@ -173,14 +211,40 @@ export function parseServerConfig(environment) {
         const unsafe = sensitive.filter((key) => placeholders.some((token) => String(result.data[key]).includes(token)));
         if (unsafe.length)
             throw new Error(`Invalid server configuration: production placeholders are forbidden for ${unsafe.join(", ")}`);
+        const insecureOrigins = [
+            ...result.data.WEB_ALLOWED_ORIGINS,
+            ...result.data.ADMIN_ALLOWED_ORIGINS,
+            ...result.data.PREVIEW_ALLOWED_ORIGINS,
+        ].filter((origin) => new URL(origin).protocol !== "https:");
+        if (insecureOrigins.length)
+            throw new Error("Invalid server configuration: production origins must use https");
+        const insecureSupabaseUrls = [
+            result.data.SUPABASE_URL,
+            result.data.SUPABASE_JWT_ISSUER,
+            result.data.SUPABASE_JWKS_URL,
+        ].filter((url) => new URL(url).protocol !== "https:");
+        if (insecureSupabaseUrls.length)
+            throw new Error("Invalid server configuration: production Supabase URLs must use https");
     }
     return result.data;
 }
-export const clientPublicConfigSchema = z.object({
+export const clientPublicConfigSchema = z
+    .object({
     VITE_API_URL: z.url(),
     VITE_SUPABASE_URL: z.url(),
     VITE_SUPABASE_ANON_KEY: z.string().min(1),
     VITE_DEPLOYMENT_ENVIRONMENT: z.string().min(1),
+})
+    .superRefine((value, context) => {
+    if (value.VITE_DEPLOYMENT_ENVIRONMENT !== "production")
+        return;
+    for (const key of ["VITE_API_URL", "VITE_SUPABASE_URL"])
+        if (new URL(value[key]).protocol !== "https:")
+            context.addIssue({
+                code: "custom",
+                path: [key],
+                message: "must use https in production",
+            });
 });
 export function parseClientPublicConfig(environment) {
     return clientPublicConfigSchema.parse(environment);

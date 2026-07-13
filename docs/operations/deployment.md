@@ -24,6 +24,8 @@ Use Node 22. Configure the web project with `VITE_API_URL`, `VITE_SUPABASE_URL`,
 
 Create a Blueprint from the root `render.yaml`. Supply every `sync: false` value in the Render dashboard during initial creation. The Web Service accepts Render's `PORT`; `PORT` takes precedence over the local `API_PORT`. HTTP and WebSocket share the same public origin and `/ws` path.
 
+Set `DEPLOYMENT_ENVIRONMENT` explicitly to `staging` or `production` in each isolated environment. Enter the currently approved policy version IDs and the matching Turnstile secret/hostname allowlist for both API and maintenance services; the worker validates the same server configuration at startup.
+
 For private testing, the Blueprint uses free API and Key Value plans. Free services can sleep and are not a reliability target. Upgrade the API before invite traffic. The hourly cron calls the bounded `worker:once` command. When job latency or volume requires continuous consumption, add a paid Background Worker using the same build and `npm run start:worker`, then disable overlapping cron work.
 
 Production origin variables are comma-separated exact URLs:
@@ -44,14 +46,19 @@ Country rows also deny registration, matching, and billing by default. An AAL2-a
 
 ## Release order
 
-1. Run `npm ci`, `npm run check`, and the relevant integration suite.
-2. Apply reviewed, forward-safe migrations explicitly with the migration role.
-3. Deploy Render and wait for `/health/live` and `/health/ready`.
+Use the protected GitHub `Release candidate` workflow with the full reviewed commit SHA. Configure each GitHub environment with a migration-only `MIGRATION_DATABASE_URL`, separate scoped Render API/worker deploy hooks, a scoped Vercel token plus organization and Web/Admin project IDs, and non-secret smoke URLs. Production requires named approvers. Render automatic deploys are disabled in the Blueprint. The workflow adds the reviewed SHA to each Render hook and waits until `/health/live` reports that exact revision; Vercel is built from the checked-out SHA rather than a branch deploy hook. The workflow enforces this order:
+
+1. Run `npm ci`, `npm run check`, all builds, PostgreSQL/Redis integration tests, and browser E2E tests.
+2. Validate and apply reviewed, forward-safe migrations explicitly with the migration role.
+3. Deploy Render and wait for `/health/ready`.
 4. Deploy Vercel Web and Admin.
-5. Smoke-test authentication, an authenticated API call, realtime ticket creation, `/ws`, matching, and signaling.
-6. Observe errors and reconnects before promoting or expanding traffic.
+5. Smoke-test API liveness and both clients.
+6. Manually smoke-test authentication, an authenticated API call, realtime ticket creation, `/ws`, matching, signaling, billing, and admin AAL2.
+7. Observe errors and reconnects before promoting or expanding traffic.
 
 Rollback must preserve client/server contract compatibility. Breaking contracts require an expand-and-contract rollout or a new realtime protocol version.
+
+Operational failure exercises, evidence records, rollback boundaries, and kill switches are defined in [rehearsals.md](rehearsals.md). Load calibration and H18 capacity evidence are defined in [load-testing.md](load-testing.md).
 
 ## Smoke checks
 
