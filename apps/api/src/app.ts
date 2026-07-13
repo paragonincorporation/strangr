@@ -3,6 +3,7 @@ import type { IncomingMessage } from "node:http";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import cors from "@fastify/cors";
+import rawBody from "fastify-raw-body";
 import { parseServerConfig, type ServerConfig } from "@paramingle/config";
 import {
   avatarUploadFinalizeRequestSchema,
@@ -37,6 +38,9 @@ import {
   matchingPreferencesSchema,
   conversationRatingRequestSchema,
   reconnectActionSchema,
+  checkoutRequestSchema,
+  manualEntitlementGrantSchema,
+  manualEntitlementRevokeSchema,
 } from "@paramingle/contracts";
 import {
   BlockRepository,
@@ -49,6 +53,8 @@ import {
   LaunchRepository,
   MatchingPreferenceRepository,
   EngagementRepository,
+  EntitlementService,
+  BillingRepository,
 } from "@paramingle/database";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -62,6 +68,7 @@ import {
   type VerifiedIdentity,
 } from "./auth.js";
 import { AvatarService, SupabaseStorage } from "./avatar-service.js";
+import { BillingService } from "./billing-service.js";
 import {
   RedisRealtimeStore,
   textSkipCooldown,
@@ -96,6 +103,8 @@ export interface CreateAppOptions {
   launch?: LaunchRepository;
   matchingPreferences?: MatchingPreferenceRepository;
   engagement?: EngagementRepository;
+  entitlements?: EntitlementService;
+  billing?: BillingService;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -160,6 +169,16 @@ export function createApp(options: CreateAppOptions = {}) {
     new MatchingPreferenceRepository(connection!.db);
   const engagement =
     options.engagement ?? new EngagementRepository(connection!.db);
+  const entitlements =
+    options.entitlements ?? new EntitlementService(connection!.db);
+  const billing =
+    options.billing ??
+    new BillingService(
+      new BillingRepository(connection!.db),
+      config.STRIPE_SECRET_KEY,
+      config.STRIPE_WEBHOOK_SECRET,
+      config.WEB_ALLOWED_ORIGINS[0]!,
+    );
   const countryFromRequest = (request: FastifyRequest) => {
     const value = request.headers[config.COUNTRY_HEADER_NAME];
     const candidate = Array.isArray(value) ? value[0] : value;
@@ -210,6 +229,12 @@ export function createApp(options: CreateAppOptions = {}) {
     methods: ["GET", "HEAD", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["authorization", "content-type", "x-device-label"],
     maxAge: 600,
+  });
+  void app.register(rawBody, {
+    field: "rawBody",
+    global: false,
+    encoding: false,
+    runFirst: true,
   });
   if (config.OPENAPI_ENABLED && config.NODE_ENV !== "production")
     void app.register(swaggerUi, { routePrefix: "/documentation" });
@@ -391,6 +416,131 @@ export function createApp(options: CreateAppOptions = {}) {
     privacyVersion: config.CURRENT_PRIVACY_VERSION,
     guidelinesVersion: config.CURRENT_GUIDELINES_VERSION,
   }));
+  app.get("/v1/catalog/plans", async () => ({
+    items: (await entitlements.catalog()).map((plan) => ({
+      key: plan.key,
+      name: plan.name,
+      monthlyPriceCents: plan.monthlyPriceCents,
+      currency: plan.currency,
+      version: plan.version,
+    })),
+  }));
+  app.get("/v1/me/entitlements", { preHandler: guard("inspect_self") }, (req) =>
+    entitlements.list(req.auth!.user.id),
+  );
+  app.get(
+    "/v1/me/media-policy",
+    { preHandler: guard("contact") },
+    async (req) => {
+      const premium = await entitlements.has(
+        req.auth!.user.id,
+        "media.premium_quality",
+      );
+      return premium
+        ? {
+            tier: "premium",
+            width: 1920,
+            height: 1080,
+            frameRate: 30,
+            maxBitrate: 2_500_000,
+            diagnosticsOnly: true,
+          }
+        : {
+            tier: "standard",
+            width: 960,
+            height: 540,
+            frameRate: 24,
+            maxBitrate: 900_000,
+            diagnosticsOnly: true,
+          };
+    },
+  );
+  app.post(
+    "/v1/billing/checkout",
+    { preHandler: [guard("contact"), launchGuard("billing")] },
+    route(checkoutRequestSchema, async (req, input) => {
+      try {
+        return await billing.checkout(
+          req.auth!.user.id,
+          input.planKey,
+          input.idempotencyKey,
+        );
+      } catch (cause) {
+        throw billingError(cause);
+      }
+    }),
+  );
+  app.post(
+    "/v1/billing/portal",
+    { preHandler: [guard("contact"), launchGuard("billing")] },
+    async (req, reply) => {
+      try {
+        return await billing.portal(req.auth!.user.id);
+      } catch (cause) {
+        return domainReply(reply, req.id, billingError(cause));
+      }
+    },
+  );
+  app.post(
+    "/v1/billing/webhooks/stripe",
+    { config: { rawBody: true } },
+    async (req, reply) => {
+      try {
+        const signature = Array.isArray(req.headers["stripe-signature"])
+          ? req.headers["stripe-signature"][0]
+          : req.headers["stripe-signature"];
+        await billing.webhook(req.rawBody as Buffer, signature);
+        return reply.code(200).send({ received: true });
+      } catch {
+        return reply
+          .code(400)
+          .send(error("bad_request", "Webhook rejected", req.id));
+      }
+    },
+  );
+  app.post(
+    "/v1/admin/entitlements/grant",
+    { preHandler: adminGuard("admin", true) },
+    route(manualEntitlementGrantSchema, async (req, input) =>
+      entitlements.grantManual(
+        req.auth!.user.id,
+        input.userId,
+        input.entitlementKey,
+        new Date(input.validUntil),
+        input.purpose,
+      ),
+    ),
+  );
+  app.post(
+    "/v1/admin/entitlements/revoke",
+    { preHandler: adminGuard("admin", true) },
+    route(manualEntitlementRevokeSchema, async (req, input) => {
+      const revoked = await entitlements.revokeManual(
+        req.auth!.user.id,
+        input.userId,
+        input.sourceReference,
+        input.purpose,
+      );
+      if (!revoked)
+        throw new DomainError("not_found", "Grant unavailable", 404);
+      await realtime.publishUser(
+        input.userId,
+        JSON.stringify(
+          serverRealtimeEnvelopeSchema.parse({
+            version: PROTOCOL_VERSION,
+            type: "session.entitlements_changed",
+            requestId: req.id,
+            payload: {
+              entitlements: (await entitlements.list(input.userId)).grants.map(
+                (grant) => grant.key,
+              ),
+            },
+          }),
+        ),
+      );
+      return { revoked: true };
+    }),
+  );
   app.get(
     "/v1/me",
     { preHandler: guard("inspect_self") },
@@ -480,10 +630,19 @@ export function createApp(options: CreateAppOptions = {}) {
           429,
         );
       const criteria = await matchingPreferences.criteria(identity.userId);
-      const result = await realtime.joinQueue(identity, input.mode, {
-        ...criteria,
-        allowPreferenceRelaxation: input.allowPreferenceRelaxation,
-      });
+      const priority = await entitlements.has(
+        identity.userId,
+        "matching.priority_weight",
+      );
+      const result = await realtime.joinQueue(
+        identity,
+        input.mode,
+        {
+          ...criteria,
+          allowPreferenceRelaxation: input.allowPreferenceRelaxation,
+        },
+        priority ? 2 : 1,
+      );
       if (result.match) {
         await encounters.start(result.match.id, result.match.mode, [
           result.match.first,
@@ -866,6 +1025,10 @@ export function createApp(options: CreateAppOptions = {}) {
     }),
   );
   app.get("/v1/friends", { preHandler: guard("contact") }, async (req) => {
+    const mayViewPresence = await entitlements.has(
+      req.auth!.user.id,
+      "presence.online_status",
+    );
     const query = req.query as { cursor?: string; limit?: string };
     const result = await friends.list(
       req.auth!.user.id,
@@ -882,7 +1045,9 @@ export function createApp(options: CreateAppOptions = {}) {
             displayName: item.display_name,
           },
           presence:
-            item.show_presence && (await realtime.isUserOnline(item.user_id))
+            mayViewPresence &&
+            item.show_presence &&
+            (await realtime.isUserOnline(item.user_id))
               ? "online"
               : "hidden",
         })),
@@ -1406,7 +1571,13 @@ export function createApp(options: CreateAppOptions = {}) {
       const connectionId = randomUUID();
       localSockets.set(`${identity.userId}:${connectionId}`, socket);
       void realtime.bindConnection(identity, connectionId);
-      void publishPresence(friends, realtime, identity.userId, true);
+      void publishPresence(
+        friends,
+        realtime,
+        entitlements,
+        identity.userId,
+        true,
+      );
       let malformed = 0;
       let alive = true;
       const heartbeat = setInterval(() => {
@@ -1473,6 +1644,7 @@ export function createApp(options: CreateAppOptions = {}) {
           matchingPreferences,
           engagement,
           accounts,
+          entitlements,
         )
           .then(async (messages) => {
             for (const item of messages)
@@ -1507,7 +1679,13 @@ export function createApp(options: CreateAppOptions = {}) {
         clearInterval(heartbeat);
         localSockets.delete(`${identity.userId}:${connectionId}`);
         void realtime.unbindConnection(identity, connectionId);
-        void publishPresence(friends, realtime, identity.userId, false);
+        void publishPresence(
+          friends,
+          realtime,
+          entitlements,
+          identity.userId,
+          false,
+        );
       });
     },
   );
@@ -1602,6 +1780,7 @@ async function handleRealtime(
   matchingPreferences: MatchingPreferenceRepository,
   engagement: EngagementRepository,
   accounts: AccountService,
+  entitlements: EntitlementService,
 ): Promise<Outbound[]> {
   if (event.type === "connection.ping") return [];
   if (event.type === "match.join") {
@@ -1609,10 +1788,19 @@ async function handleRealtime(
     if (await moderation.restriction(identity.userId, "matching"))
       throw new Error("capability_revoked");
     const criteria = await matchingPreferences.criteria(identity.userId);
-    const result = await realtime.joinQueue(identity, event.payload.mode, {
-      ...criteria,
-      allowPreferenceRelaxation: event.payload.allowPreferenceRelaxation,
-    });
+    const priority = await entitlements.has(
+      identity.userId,
+      "matching.priority_weight",
+    );
+    const result = await realtime.joinQueue(
+      identity,
+      event.payload.mode,
+      {
+        ...criteria,
+        allowPreferenceRelaxation: event.payload.allowPreferenceRelaxation,
+      },
+      priority ? 2 : 1,
+    );
     if (result.match) {
       await encounters.start(result.match.id, result.match.mode, [
         result.match.first,
@@ -1707,8 +1895,11 @@ async function handleRealtime(
       connectedAt && match.mode === "text"
         ? new Date(new Date(connectedAt).getTime() + 25_000).toISOString()
         : null;
-    return connectedAt
-      ? [match.first, match.second].flatMap((userId) => [
+    if (!connectedAt) return [];
+    const events = await Promise.all(
+      [match.first, match.second].map(async (userId) => {
+        const premium = await entitlements.has(userId, "media.premium_quality");
+        return [
           {
             userId,
             event: {
@@ -1735,8 +1926,38 @@ async function handleRealtime(
               },
             },
           },
-        ])
-      : [];
+          {
+            userId,
+            event: {
+              version: PROTOCOL_VERSION,
+              type: "session.quality_policy" as const,
+              requestId: event.requestId,
+              payload: {
+                matchId: match.id,
+                ...(premium
+                  ? {
+                      tier: "premium" as const,
+                      width: 1920,
+                      height: 1080,
+                      frameRate: 30,
+                      maxBitrate: 2_500_000,
+                      diagnosticsOnly: true as const,
+                    }
+                  : {
+                      tier: "standard" as const,
+                      width: 960,
+                      height: 540,
+                      frameRate: 24,
+                      maxBitrate: 900_000,
+                      diagnosticsOnly: true as const,
+                    }),
+              },
+            },
+          },
+        ];
+      }),
+    );
+    return events.flat();
   }
   if (event.type === "session.reveal_identity") {
     const reveal = await engagement.revealOwnCard(match.id, identity.userId);
@@ -1826,7 +2047,16 @@ async function handleRealtime(
       );
     if (event.type === "match.next") {
       const criteria = await matchingPreferences.criteria(identity.userId);
-      const result = await realtime.joinQueue(identity, match.mode, criteria);
+      const priority = await entitlements.has(
+        identity.userId,
+        "matching.priority_weight",
+      );
+      const result = await realtime.joinQueue(
+        identity,
+        match.mode,
+        criteria,
+        priority ? 2 : 1,
+      );
       if (result.match) await publishMatch(realtime, result.match);
       else
         ended.push({
@@ -1946,6 +2176,24 @@ function engagementError(cause: unknown) {
     );
   return cause;
 }
+function billingError(cause: unknown) {
+  const code = cause instanceof Error ? cause.message : "provider_unavailable";
+  if (code === "plan_unavailable")
+    return new DomainError("not_found", "Plan unavailable", 404);
+  if (code === "subscription_exists")
+    return new DomainError(
+      "conflict",
+      "Manage the existing subscription in the billing portal",
+      409,
+    );
+  if (code === "subscription_unavailable")
+    return new DomainError("not_found", "No billing account is available", 404);
+  return new DomainError(
+    "internal_error",
+    "Billing provider is unavailable",
+    503,
+  );
+}
 function socialError(cause: unknown) {
   const code = cause instanceof Error ? cause.message : "request_unavailable";
   if (
@@ -1961,18 +2209,20 @@ function socialError(cause: unknown) {
 async function publishPresence(
   friends: FriendRepository,
   realtime: RedisRealtimeStore,
+  entitlements: EntitlementService,
   userId: string,
   online: boolean,
 ) {
   const requestId = randomUUID();
   for (const viewerId of await friends.presenceViewers(userId))
-    await realtime.publishUser(
-      viewerId,
-      JSON.stringify({
-        version: PROTOCOL_VERSION,
-        type: "presence.changed",
-        requestId,
-        payload: { userId, online },
-      }),
-    );
+    if (await entitlements.has(viewerId, "presence.online_status"))
+      await realtime.publishUser(
+        viewerId,
+        JSON.stringify({
+          version: PROTOCOL_VERSION,
+          type: "presence.changed",
+          requestId,
+          payload: { userId, online },
+        }),
+      );
 }

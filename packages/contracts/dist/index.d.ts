@@ -536,6 +536,67 @@ export declare const rtcCredentialsResponseSchema: z.ZodObject<{
     }, z.core.$strip>>;
     expiresAt: z.ZodISODateTime;
 }, z.core.$strip>;
+export declare const planKeySchema: z.ZodEnum<{
+    free: "free";
+    lite: "lite";
+    loaded: "loaded";
+    maxed_out: "maxed_out";
+}>;
+export declare const entitlementKeySchema: z.ZodEnum<{
+    "matching.gender_filter": "matching.gender_filter";
+    "presence.online_status": "presence.online_status";
+    "media.premium_quality": "media.premium_quality";
+    "matching.reconnect": "matching.reconnect";
+    "profile.frames": "profile.frames";
+    "profile.animated_background": "profile.animated_background";
+    "profile.supporter_badge": "profile.supporter_badge";
+    "matching.priority_weight": "matching.priority_weight";
+    "call_card.paid_override": "call_card.paid_override";
+    "features.early_access": "features.early_access";
+    "support.direct": "support.direct";
+}>;
+export declare const checkoutRequestSchema: z.ZodObject<{
+    planKey: z.ZodEnum<{
+        lite: "lite";
+        loaded: "loaded";
+        maxed_out: "maxed_out";
+    }>;
+    idempotencyKey: z.ZodString;
+}, z.core.$strip>;
+export declare const manualEntitlementGrantSchema: z.ZodObject<{
+    userId: z.ZodUUID;
+    entitlementKey: z.ZodEnum<{
+        "matching.gender_filter": "matching.gender_filter";
+        "presence.online_status": "presence.online_status";
+        "media.premium_quality": "media.premium_quality";
+        "matching.reconnect": "matching.reconnect";
+        "profile.frames": "profile.frames";
+        "profile.animated_background": "profile.animated_background";
+        "profile.supporter_badge": "profile.supporter_badge";
+        "matching.priority_weight": "matching.priority_weight";
+        "call_card.paid_override": "call_card.paid_override";
+        "features.early_access": "features.early_access";
+        "support.direct": "support.direct";
+    }>;
+    validUntil: z.ZodISODateTime;
+    purpose: z.ZodString;
+}, z.core.$strip>;
+export declare const manualEntitlementRevokeSchema: z.ZodObject<{
+    userId: z.ZodUUID;
+    sourceReference: z.ZodString;
+    purpose: z.ZodString;
+}, z.core.$strip>;
+export declare const mediaQualityPolicySchema: z.ZodObject<{
+    tier: z.ZodEnum<{
+        standard: "standard";
+        premium: "premium";
+    }>;
+    width: z.ZodNumber;
+    height: z.ZodNumber;
+    frameRate: z.ZodNumber;
+    maxBitrate: z.ZodNumber;
+    diagnosticsOnly: z.ZodLiteral<true>;
+}, z.core.$strip>;
 export declare const meResponseSchema: z.ZodObject<{
     account: z.ZodObject<{
         id: z.ZodUUID;
@@ -871,6 +932,41 @@ export declare const serverRealtimeEnvelopeSchema: z.ZodDiscriminatedUnion<[z.Zo
     payload: z.ZodObject<{
         matchId: z.ZodUUID;
         windowClosesAt: z.ZodNullable<z.ZodISODateTime>;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"session.quality_policy">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        matchId: z.ZodUUID;
+        tier: z.ZodEnum<{
+            standard: "standard";
+            premium: "premium";
+        }>;
+        width: z.ZodNumber;
+        height: z.ZodNumber;
+        frameRate: z.ZodNumber;
+        maxBitrate: z.ZodNumber;
+        diagnosticsOnly: z.ZodLiteral<true>;
+    }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
+    version: z.ZodLiteral<1>;
+    type: z.ZodLiteral<"session.entitlements_changed">;
+    requestId: z.ZodString;
+    payload: z.ZodObject<{
+        entitlements: z.ZodArray<z.ZodEnum<{
+            "matching.gender_filter": "matching.gender_filter";
+            "presence.online_status": "presence.online_status";
+            "media.premium_quality": "media.premium_quality";
+            "matching.reconnect": "matching.reconnect";
+            "profile.frames": "profile.frames";
+            "profile.animated_background": "profile.animated_background";
+            "profile.supporter_badge": "profile.supporter_badge";
+            "matching.priority_weight": "matching.priority_weight";
+            "call_card.paid_override": "call_card.paid_override";
+            "features.early_access": "features.early_access";
+            "support.direct": "support.direct";
+        }>>;
     }, z.core.$strip>;
 }, z.core.$strip>, z.ZodObject<{
     version: z.ZodLiteral<1>;

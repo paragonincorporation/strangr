@@ -10,3 +10,5 @@ export * from "./moderation.js";
 export * from "./launch.js";
 export * from "./matching.js";
 export * from "./engagement.js";
+export * from "./entitlements.js";
+export * from "./billing.js";

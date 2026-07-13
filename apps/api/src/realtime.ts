@@ -243,6 +243,7 @@ export class RedisRealtimeStore {
     identity: RealtimeIdentity,
     mode: MatchMode,
     criteria: MatchCriteria,
+    priorityWeight = 1,
   ): Promise<{ queuedAt: string; match: MatchRecord | null }> {
     const queuedAt = new Date().toISOString();
     const partition = `${identity.cohort}:${mode}`;
@@ -310,7 +311,7 @@ export class RedisRealtimeStore {
         keys: [activeKey, queueKey, entryKey],
         arguments: [
           identity.userId,
-          String(Date.now()),
+          String(Date.now() - (priorityWeight > 1 ? 5_000 : 0)),
           mode,
           matchId,
           "20000",

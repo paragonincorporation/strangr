@@ -5,8 +5,10 @@ import {
   FriendRepository,
   ModerationRepository,
   createDatabase,
+  BillingRepository,
 } from "@paramingle/database";
 import { AvatarService, SupabaseStorage } from "./avatar-service.js";
+import { BillingService } from "./billing-service.js";
 
 const config = parseServerConfig(process.env);
 const { db, pool } = createDatabase(config.DATABASE_URL);
@@ -22,6 +24,12 @@ const encounters = new EncounterRepository(db);
 const friends = new FriendRepository(db);
 const communications = new CommunicationRepository(db);
 const moderation = new ModerationRepository(db);
+const billing = new BillingService(
+  new BillingRepository(db),
+  config.STRIPE_SECRET_KEY,
+  config.STRIPE_WEBHOOK_SECRET,
+  config.WEB_ALLOWED_ORIGINS[0]!,
+);
 const dryRun = process.argv.includes("--dry-run");
 const intervalMs = Number(process.env.WORKER_HEARTBEAT_MS || 30_000);
 const once = process.argv.includes("--once");
@@ -60,6 +68,7 @@ const run = async (): Promise<boolean> => {
       dryRun,
     );
     const expiredSanctions = dryRun ? [] : await moderation.expire();
+    const reconciledSubscriptions = dryRun ? 0 : await billing.reconcile();
     console.info(
       JSON.stringify({
         service: "paramingle-worker",
@@ -70,6 +79,7 @@ const run = async (): Promise<boolean> => {
         missedDirectCalls,
         callRetention,
         expiredSanctions: expiredSanctions.length,
+        reconciledSubscriptions,
         timestamp: new Date().toISOString(),
       }),
     );

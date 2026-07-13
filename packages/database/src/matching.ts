@@ -1,12 +1,8 @@
-import { and, eq, gt, isNull, lte, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { MatchingPreferences } from "@paramingle/contracts";
 import type { Database } from "./client.js";
-import {
-  entitlementGrants,
-  matchingPreferences,
-  profiles,
-  userCountryState,
-} from "./schema.js";
+import { matchingPreferences, profiles, userCountryState } from "./schema.js";
+import { EntitlementService } from "./entitlements.js";
 
 export const GENDER_FILTER_ENTITLEMENT = "matching.gender_filter";
 
@@ -16,34 +12,12 @@ export type MatchCriteria = MatchingPreferences & {
   interests: string[];
 };
 
-export class EntitlementRepository {
-  constructor(private readonly db: Database) {}
-
-  async has(userId: string, entitlementKey: string, now = new Date()) {
-    const [row] = await this.db
-      .select({ id: entitlementGrants.id })
-      .from(entitlementGrants)
-      .where(
-        and(
-          eq(entitlementGrants.userId, userId),
-          eq(entitlementGrants.entitlementKey, entitlementKey),
-          isNull(entitlementGrants.revokedAt),
-          lte(entitlementGrants.validFrom, now),
-          or(
-            isNull(entitlementGrants.validUntil),
-            gt(entitlementGrants.validUntil, now),
-          ),
-        ),
-      )
-      .limit(1);
-    return Boolean(row);
-  }
-}
+export { EntitlementService as EntitlementRepository } from "./entitlements.js";
 
 export class MatchingPreferenceRepository {
   constructor(
     private readonly db: Database,
-    private readonly entitlements = new EntitlementRepository(db),
+    private readonly entitlements = new EntitlementService(db),
   ) {}
 
   async get(userId: string) {

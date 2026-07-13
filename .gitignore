@@ -13,6 +13,10 @@ dist/
 packages/database/dist/*
 !packages/database/dist/engagement.js
 !packages/database/dist/engagement.d.ts
+!packages/database/dist/billing.js
+!packages/database/dist/billing.d.ts
+!packages/database/dist/entitlements.js
+!packages/database/dist/entitlements.d.ts
 .vite/
 *.tsbuildinfo
 

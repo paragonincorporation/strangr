@@ -950,34 +950,34 @@ For every manual step, the responsible agent must document the dashboard URL, ex
 
 Update this table after every completed task. Keep evidence concise and link repository files where useful.
 
-| Task                      | Status      | Owner/agent | Evidence                                   | Blocker or exact next action                             |
-| ------------------------- | ----------- | ----------- | ------------------------------------------ | -------------------------------------------------------- |
-| 0. Live inventory         | complete    | Codex       | July 12 inventory below                    | Re-audit affected boundaries at the start of each task   |
-| 1. Human owners           | blocked     | unassigned  | Required roles listed below                | Humans assign accountable owners                         |
-| 2. Launch and policies    | in_progress | Codex       | Run 2 country controls and policy gates    | Humans approve countries and final policy documents      |
-| 3. Environments           | in_progress | Codex       | Run 3 CI, validation, setup runbook        | Humans create/configure production provider accounts     |
-| 4. 18+ onboarding         | complete    | Codex       | Run 2 onboarding, contact guards, tests    | Exercise database integration when services are running  |
-| 5. Matching preferences   | complete    | Codex       | Run 3 persistence, API, Redis, UI, tests   | Exercise integration suite through CI or local services  |
-| 6. Text cooldown          | complete    | Codex       | Realtime lease, contracts, API, UI, tests  | Exercise Redis integration when Docker is running        |
-| 7. Ratings                | in_progress | Codex       | Run 4 migration, API/realtime/UI, tests    | Human copy approval and staging integration validation   |
-| 8. Safe-card reveal       | in_progress | Codex       | Run 4 scoped projection/revocation/UI      | Human disclosure approval and staging validation         |
-| 9. Reconnect              | in_progress | Codex       | Run 4 entitlement/offer/atomic accept flow | Human lifetime/copy approval and staging validation      |
-| 10. Media quality         | not_started | unassigned  | Existing WebRTC/media boundary             | Can follow Task 0 inventory                              |
-| 11. Stripe billing        | blocked     | unassigned  | Config placeholders only                   | Manual Stripe account/approval plus agent implementation |
-| 12. Entitlements          | in_progress | Codex       | Grant table and gender-filter boundary     | Expand around Stripe plan/catalog state in Tasks 11-12   |
-| 13. Premium UI            | not_started | unassigned  | Placeholder route exists                   | Depends on catalog and entitlements                      |
-| 14. Moderation operations | blocked     | unassigned  | Existing reports/admin/sanctions           | Manual taxonomy/staffing plus gap audit                  |
-| 15. Anti-bot/spam         | not_started | unassigned  | Existing basic rate limiting               | Configure Turnstile and expand limits                    |
-| 16. NSFW signals          | blocked     | unassigned  | None                                       | Manual model/privacy approval                            |
-| 17. Privacy operations    | not_started | unassigned  | Partial session/account foundations        | Inventory gaps after Task 0                              |
-| 18. Observability/cost    | not_started | unassigned  | Health endpoints exist                     | Choose providers and implement redaction/metrics         |
-| 19. Hardening             | not_started | unassigned  | Current quality foundation                 | Begins after feature-complete release candidate          |
-| 20. E2E/load              | not_started | unassigned  | Basic Playwright/integration config        | Expand throughout Tasks 4-19                             |
-| 21. Deploy/rehearse       | not_started | unassigned  | Vercel/Render manifests exist              | Requires staging providers and feature completion        |
+| Task                      | Status      | Owner/agent | Evidence                                                 | Blocker or exact next action                            |
+| ------------------------- | ----------- | ----------- | -------------------------------------------------------- | ------------------------------------------------------- |
+| 0. Live inventory         | complete    | Codex       | July 12 inventory below                                  | Re-audit affected boundaries at the start of each task  |
+| 1. Human owners           | blocked     | unassigned  | Required roles listed below                              | Humans assign accountable owners                        |
+| 2. Launch and policies    | in_progress | Codex       | Run 2 country controls and policy gates                  | Humans approve countries and final policy documents     |
+| 3. Environments           | in_progress | Codex       | Run 3 CI, validation, setup runbook                      | Humans create/configure production provider accounts    |
+| 4. 18+ onboarding         | complete    | Codex       | Run 2 onboarding, contact guards, tests                  | Exercise database integration when services are running |
+| 5. Matching preferences   | complete    | Codex       | Run 3 persistence, API, Redis, UI, tests                 | Exercise integration suite through CI or local services |
+| 6. Text cooldown          | complete    | Codex       | Realtime lease, contracts, API, UI, tests                | Exercise Redis integration when Docker is running       |
+| 7. Ratings                | in_progress | Codex       | Run 4 migration, API/realtime/UI, tests                  | Human copy approval and staging integration validation  |
+| 8. Safe-card reveal       | in_progress | Codex       | Run 4 scoped projection/revocation/UI                    | Human disclosure approval and staging validation        |
+| 9. Reconnect              | in_progress | Codex       | Run 4 entitlement/offer/atomic accept flow               | Human lifetime/copy approval and staging validation     |
+| 10. Media quality         | in_progress | Codex       | Run 5 server policy/adaptation/browser fallbacks         | H10 selects TURN and validates targets in staging       |
+| 11. Stripe billing        | in_progress | Codex       | Run 5 migration/webhooks/Checkout/Portal/reconciliation  | H11 approval, IDs, tax decisions, sandbox/live tests    |
+| 12. Entitlements          | in_progress | Codex       | Run 5 centralized grants/plan rights/audit/fair priority | H11 approves grace and staging revocation tests         |
+| 13. Premium UI            | not_started | unassigned  | Placeholder route exists                                 | Depends on catalog and entitlements                     |
+| 14. Moderation operations | blocked     | unassigned  | Existing reports/admin/sanctions                         | Manual taxonomy/staffing plus gap audit                 |
+| 15. Anti-bot/spam         | not_started | unassigned  | Existing basic rate limiting                             | Configure Turnstile and expand limits                   |
+| 16. NSFW signals          | blocked     | unassigned  | None                                                     | Manual model/privacy approval                           |
+| 17. Privacy operations    | not_started | unassigned  | Partial session/account foundations                      | Inventory gaps after Task 0                             |
+| 18. Observability/cost    | not_started | unassigned  | Health endpoints exist                                   | Choose providers and implement redaction/metrics        |
+| 19. Hardening             | not_started | unassigned  | Current quality foundation                               | Begins after feature-complete release candidate         |
+| 20. E2E/load              | not_started | unassigned  | Basic Playwright/integration config                      | Expand throughout Tasks 4-19                            |
+| 21. Deploy/rehearse       | not_started | unassigned  | Vercel/Render manifests exist                            | Requires staging providers and feature completion       |
 
 ### Current handoff
 
-Tasks 0, 4, 5, and 6 are complete. Tasks 2 and 3 have complete agent implementations but remain `in_progress` on human approvals and provider setup. Task 1 remains blocked on named owners. Tasks 7, 8, and 9 now have complete agent implementations and automated coverage but remain `in_progress` until Human tasks H7-H9 approve the provisional product decisions and the flows pass staging integration with PostgreSQL and Redis. The exact next agent implementation task is Task 10, media quality policies. The entitlement grant boundary created for Task 5 is intentionally partial Task 12 work and must be extended, not replaced, during Stripe billing.
+Tasks 0, 4, 5, and 6 are complete. Tasks 2 and 3 have complete agent implementations but remain `in_progress` on human approvals and provider setup. Task 1 remains blocked on named owners. Tasks 7-9 have complete agent implementations and await H7-H9 plus staging integration. Tasks 10-12 now have complete agent implementations and remain `in_progress` only on H10/H11 provider approval, catalog configuration, and real-service staging validation. Paid plans remain disabled in the seeded catalog until that work is recorded. The exact next agent implementation task is Task 13, replacing the premium placeholder UI.
 
 ## 16. Progress updates
 
@@ -1202,6 +1202,54 @@ Remaining risks and manual gates:
 
 Exact next agent task: Task 10, media quality policies. Do not begin billing UI or market premium quality as guaranteed before the server media policy and browser fallbacks exist.
 
+### Run 5: media quality, Stripe billing, and centralized entitlements
+
+Date: July 13, 2026
+
+Status: Tasks 10-12 agent implementation complete; provider approval, catalog configuration, and staging validation remain
+
+#### Tasks 10-12 implementation record
+
+- Added migration `0010_billing_entitlements.sql` without rewriting prior migrations. It seeds stable Free/Lite/Loaded/Maxed Out plan keys and USD list prices, while keeping paid rows inactive until H11 supplies approved environment-specific Stripe product/price IDs. It adds durable subscriptions, idempotent webhook events, payment-failure grace state, and immutable entitlement audit records.
+- Added verified raw-body Stripe webhooks and event-first replay protection. Subscription, checkout completion, invoice paid/failed, refund, dispute, and subscription create/update/delete paths converge on one subscription projection. Older subscription object timestamps cannot overwrite newer state.
+- Added authenticated Checkout and Billing Portal endpoints. Checkout uses a caller idempotency key and only returns a hosted provider URL; redirect/return state never provisions access.
+- Added hourly scheduled reconciliation to retrieve Stripe subscription state and repair missed webhook delivery. Webhook payloads and card data are not persisted or logged.
+- Centralized all stable V1 entitlement keys in `EntitlementService`. Gender filtering, online-status viewing, premium media, reconnect, capped matching priority, safe-card override, and the remaining cosmetic/support feature keys use the same durable grant boundary. Stripe plan changes sync subscription grants; audited manual grants require an expiry and recent AAL2 admin authorization.
+- Preserved cancellation rights through the paid-through date. A provisional three-day `past_due` grace period is applied from the verified event timestamp; unpaid, paused, canceled, refunded, or disputed state removes plan rights. H11 must approve or replace this duration before live billing.
+- Added a capped queue advantage for Maxed Out: its queue timestamp receives at most a five-second boost. The queue remains oldest-compatible-first after the cap, so continued paid arrivals cannot indefinitely displace a free user.
+- Added server-owned standard (960x540, 24 fps, 900 kbps) and premium (up to 1920x1080, 30 fps, 2.5 Mbps) policy responses and realtime delivery. Browser capture constraints and sender parameters are best-effort; unsupported parameter APIs fail safely.
+- Added five-second WebRTC statistics sampling and automatic bitrate/frame-rate reduction for high loss, high round-trip time, or TURN relay. Diagnostics describe measured/adapted conditions and never promise received resolution. Permission denial continues to offer text, missing media APIs fail clearly, and camera replacement stops old tracks.
+- Presence projections and realtime presence events now require `presence.online_status`; browser claims cannot grant it. Media policy and queue priority are also resolved on the server.
+
+Files changed:
+
+- `packages/database/migrations/0010_billing_entitlements.sql`, migration journal, schema, `billing.ts`, `entitlements.ts`, matching export, and generated package output;
+- `packages/contracts/src/index.ts` and generated contract output;
+- `apps/api/src/billing-service.ts`, billing tests, `app.ts`, `realtime.ts`, `worker.ts`, and package dependencies;
+- `apps/web/src/media.ts`, media tests, and conversation integration;
+- this execution plan.
+
+Verification:
+
+- package builds for contracts and database: passed;
+- full workspace typecheck: passed;
+- final `npm run check`: passed; formatting, lint, workspace typecheck, all tests, 10-migration validation, and secret scan passed;
+- API tests: 15 passed, including signed webhook processing, invalid signatures, and replay protection;
+- web tests: 9 passed, including supported and unsupported sender-parameter behavior;
+- contract tests: 11 passed;
+- migration validation: 10 SQL migrations with matching journal entries passed;
+- PostgreSQL/Redis integration was not executed locally because the services remain unavailable; CI/staging must exercise migration 0010, concurrent webhook delivery, out-of-order events, queue fairness, entitlement revocation during active queues/calls, and TURN-only adaptation.
+
+Remaining risks and manual gates:
+
+- H10 must choose/fund TURN, test representative browsers/networks/regions, set relay budgets, and approve or replace both quality targets.
+- H11 must obtain Stripe and tax approval, approve the provisional three-day grace and five-second queue cap, populate sandbox/live catalog IDs outside source code, configure Portal/webhooks, and run the complete sandbox matrix.
+- Paid catalog rows intentionally remain inactive. Checkout fails closed until an approved price ID and `active=true` are applied by controlled operational configuration.
+- Reconciliation currently runs in the existing maintenance worker cadence and uses a one-hour staleness threshold. Operations must confirm the worker schedule and alerting before live billing.
+- Safari, Firefox, Chromium, iOS, Android, camera switching, network handoff, and TURN-only behavior require real-device staging evidence; unit tests cannot certify browser/hardware behavior.
+
+Exact next agent task: Task 13, replace the premium placeholder UI using the server catalog and entitlement/subscription projection. Do not activate paid catalog rows or present checkout as live until H11 is complete.
+
 ## 17. Human tasks
 
 This is the canonical checklist for work that Codex agents cannot complete alone. Each item names the agent task it unblocks. Keep secrets, identity documents, contracts, private legal advice, employee details, and recovery codes outside the repository. Record only completion status, owner role, date, and a safe evidence reference here.
@@ -1400,6 +1448,9 @@ Status: `not_started`
 6. Store secrets in Render and record rotation/kill procedures.
 7. Approve the initial free and premium quality targets based on measured results.
 8. Set budget alerts and a maximum acceptable TURN cost per 1,000 conversations.
+9. Validate or replace Run 5's provisional standard target (960x540/24 fps/900 kbps) and premium ceiling (1920x1080/30 fps/2.5 Mbps).
+10. Test permission denial, no-camera/no-microphone devices, unsupported sender parameters, camera switching, Wi-Fi/cellular handoff, high loss/latency, and forced relay on current Safari, Firefox, Chromium, iOS, and Android.
+11. Record the selected vendor dashboard URL, credential owner/scope, Render secret destinations (`TURN_URLS`, `TURN_CREDENTIAL_SECRET`), rotation/revocation procedure, test date, and safe evidence reference in the private operations register. Never copy credentials here.
 
 Completion evidence: unassigned
 
@@ -1420,6 +1471,11 @@ Status: `not_started`
 10. Run sandbox purchase, renewal, upgrade, downgrade, payment failure, cancellation, refund, dispute, duplicate webhook, and reconciliation tests.
 11. Review and approve the final premium comparison page. V2-only benefits must say "coming in V2."
 12. Record live approval, tax decisions, catalog IDs, and test evidence in the private register without recording secret keys.
+13. In the [Stripe Dashboard](https://dashboard.stripe.com/), record separate test/live product and monthly price IDs against stable keys `lite`, `loaded`, and `maxed_out`; apply them to `subscription_plans` through a controlled operational change and activate a paid row only in its matching environment.
+14. Approve or replace Run 5's provisional three-day payment-failure grace period and five-second capped Maxed Out queue advantage. Record user copy and refund/dispute revocation policy.
+15. Configure the exact webhook endpoint `/v1/billing/webhooks/stripe` for subscription created/updated/deleted, checkout completion, invoice paid/payment failed, charge refunds, and charge disputes. Store `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` only in the matching Render environment and record rotation/rollback.
+16. Confirm the maintenance worker is scheduled and monitored for hourly reconciliation; alert on failed webhook processing, stale subscription reconciliation, or a paid catalog with a missing/mismatched price ID.
+17. Verify in staging that cancellation retains access only through the paid-through date, grace expiry removes access, active calls/queues refresh after revocation, duplicate/out-of-order webhooks do not re-grant, refunds/disputes revoke, manual grants expire with audit records, and free users are not starved by paid queue traffic.
 
 Completion evidence: unassigned
 

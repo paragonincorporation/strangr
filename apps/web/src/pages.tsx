@@ -21,7 +21,7 @@ import {
 import { api, supabase, useAuth } from "./auth.js";
 import { useCallUi } from "./call-store.js";
 import { RouteState } from "./components/route-state.js";
-import { MediaManager } from "./media.js";
+import { MediaManager, type MediaQualityPolicy } from "./media.js";
 import { RealtimeClient } from "./realtime-client.js";
 
 export function LandingPage() {
@@ -1570,6 +1570,13 @@ export function ConversationPage() {
           const eligible = event.payload.ratingEligibleAt;
           if (typeof eligible === "string")
             setRatingEligibleAt(new Date(eligible).getTime());
+        } else if (event.type === "session.quality_policy") {
+          const policy = event.payload as unknown as MediaQualityPolicy;
+          if (peer.current)
+            void media.current.applyPolicy(peer.current, policy);
+          setToast(
+            `${policy.tier === "premium" ? "Premium" : "Standard"} quality target active. Actual quality adapts to the connection.`,
+          );
         } else if (event.type === "session.identity_revealed") {
           setCallCard(event.payload.card as typeof callCard);
           setToast("This person shared their safe call card.");
@@ -1623,7 +1630,8 @@ export function ConversationPage() {
     const start = async () => {
       if (mode === "video")
         try {
-          const stream = await media.current.acquire();
+          const policy = await api<MediaQualityPolicy>("/v1/me/media-policy");
+          const stream = await media.current.acquire(policy);
           if (localVideo.current) localVideo.current.srcObject = stream;
         } catch {
           if (active) {
@@ -1677,6 +1685,8 @@ export function ConversationPage() {
     media.current.stream
       ?.getTracks()
       .forEach((track) => connection.addTrack(track, media.current.stream!));
+    await media.current.applyPolicy(connection, media.current.policy);
+    media.current.monitor(connection, setToast);
     connection.ontrack = (event) => {
       if (remoteVideo.current)
         remoteVideo.current.srcObject = event.streams[0] ?? null;

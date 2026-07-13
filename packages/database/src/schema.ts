@@ -227,6 +227,105 @@ export const entitlementGrants = pgTable(
   ],
 );
 
+export const subscriptionPlanKeyEnum = pgEnum("subscription_plan_key", [
+  "free",
+  "lite",
+  "loaded",
+  "maxed_out",
+]);
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "incomplete",
+  "trialing",
+  "active",
+  "past_due",
+  "unpaid",
+  "paused",
+  "canceled",
+]);
+export const subscriptionPlans = pgTable("subscription_plans", {
+  key: subscriptionPlanKeyEnum("key").primaryKey(),
+  name: text("name").notNull(),
+  monthlyPriceCents: integer("monthly_price_cents").notNull(),
+  currency: text("currency").notNull().default("USD"),
+  stripeProductId: text("stripe_product_id"),
+  stripePriceId: text("stripe_price_id").unique(),
+  version: integer("version").notNull().default(1),
+  active: boolean("active").notNull().default(false),
+  ...timestamps,
+});
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: "cascade" }),
+    planKey: subscriptionPlanKeyEnum("plan_key")
+      .notNull()
+      .references(() => subscriptionPlans.key, { onDelete: "restrict" }),
+    stripeCustomerId: text("stripe_customer_id").notNull().unique(),
+    stripeSubscriptionId: text("stripe_subscription_id").notNull().unique(),
+    status: subscriptionStatusEnum("status").notNull(),
+    currentPeriodStart: timestamp("current_period_start", {
+      withTimezone: true,
+    }),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    canceledAt: timestamp("canceled_at", { withTimezone: true }),
+    paymentGraceUntil: timestamp("payment_grace_until", { withTimezone: true }),
+    lastProcessedObjectAt: timestamp("last_processed_object_at", {
+      withTimezone: true,
+    }).notNull(),
+    lastReconciledAt: timestamp("last_reconciled_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    index("subscriptions_reconciliation_idx").on(
+      table.lastReconciledAt,
+      table.status,
+    ),
+  ],
+);
+export const stripeWebhookEvents = pgTable("stripe_webhook_events", {
+  eventId: text("event_id").primaryKey(),
+  eventType: text("event_type").notNull(),
+  objectId: text("object_id"),
+  objectCreatedAt: timestamp("object_created_at", {
+    withTimezone: true,
+  }).notNull(),
+  processingState: text("processing_state").notNull().default("processing"),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  failureCode: text("failure_code"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+export const entitlementAuditLogs = pgTable(
+  "entitlement_audit_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    actorId: uuid("actor_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    entitlementKey: text("entitlement_key").notNull(),
+    action: text("action").notNull(),
+    source: text("source").notNull(),
+    sourceReference: text("source_reference").notNull(),
+    validUntil: timestamp("valid_until", { withTimezone: true }),
+    purpose: text("purpose").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("entitlement_audit_user_idx").on(table.userId, table.createdAt),
+  ],
+);
+
 export const privacySettings = pgTable("privacy_settings", {
   userId: uuid("user_id")
     .primaryKey()

@@ -64,6 +64,13 @@
       "when": 1783911600000,
       "tag": "0009_ratings_reveals_reconnect",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783915200000,
+      "tag": "0010_billing_entitlements",
+      "breakpoints": true
     }
   ]
 }

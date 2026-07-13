@@ -405,6 +405,43 @@ export const rtcCredentialsResponseSchema = z.object({
   ),
   expiresAt: timestampSchema,
 });
+export const planKeySchema = z.enum(["free", "lite", "loaded", "maxed_out"]);
+export const entitlementKeySchema = z.enum([
+  "matching.gender_filter",
+  "presence.online_status",
+  "media.premium_quality",
+  "matching.reconnect",
+  "profile.frames",
+  "profile.animated_background",
+  "profile.supporter_badge",
+  "matching.priority_weight",
+  "call_card.paid_override",
+  "features.early_access",
+  "support.direct",
+]);
+export const checkoutRequestSchema = z.object({
+  planKey: planKeySchema.exclude(["free"]),
+  idempotencyKey: idempotencyKeySchema,
+});
+export const manualEntitlementGrantSchema = z.object({
+  userId: internalIdSchema,
+  entitlementKey: entitlementKeySchema,
+  validUntil: timestampSchema,
+  purpose: z.string().trim().min(8).max(500),
+});
+export const manualEntitlementRevokeSchema = z.object({
+  userId: internalIdSchema,
+  sourceReference: z.string().uuid(),
+  purpose: z.string().trim().min(8).max(500),
+});
+export const mediaQualityPolicySchema = z.object({
+  tier: z.enum(["standard", "premium"]),
+  width: z.number().int().positive().max(1920),
+  height: z.number().int().positive().max(1080),
+  frameRate: z.number().int().positive().max(60),
+  maxBitrate: z.number().int().positive(),
+  diagnosticsOnly: z.literal(true),
+});
 export const meResponseSchema = z.object({
   account: accountSchema,
   profile: profileSchema.nullable(),
@@ -662,6 +699,18 @@ export const serverRealtimeEnvelopeSchema = z.discriminatedUnion("type", [
     payload: matchIdPayloadSchema.extend({
       windowClosesAt: timestampSchema.nullable(),
     }),
+  }),
+  z.object({
+    version: z.literal(PROTOCOL_VERSION),
+    type: z.literal("session.quality_policy"),
+    requestId: requestIdSchema,
+    payload: matchIdPayloadSchema.extend(mediaQualityPolicySchema.shape),
+  }),
+  z.object({
+    version: z.literal(PROTOCOL_VERSION),
+    type: z.literal("session.entitlements_changed"),
+    requestId: requestIdSchema,
+    payload: z.object({ entitlements: z.array(entitlementKeySchema) }),
   }),
   z.object({
     version: z.literal(PROTOCOL_VERSION),
