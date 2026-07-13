@@ -59,6 +59,7 @@ export const errorCodeSchema = z.enum([
     "cooldown_active",
     "age_restricted",
     "country_unavailable",
+    "reauthentication_required",
 ]);
 export const errorEnvelopeSchema = z.object({
     error: z.object({
@@ -114,6 +115,12 @@ export const healthResponseSchema = z.object({
         redis: z.enum(["up", "down", "not-configured"]),
     })
         .optional(),
+});
+export const privacyExportRequestSchema = z.object({
+    idempotencyKey: idempotencyKeySchema,
+});
+export const privacyDeletionRequestSchema = z.object({
+    idempotencyKey: idempotencyKeySchema,
 });
 export const accountSchema = z.object({
     id: internalIdSchema,

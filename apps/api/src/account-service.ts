@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
 import type { Database, FieldEncryptor, UserRow } from "@paramingle/database";
 import {
   privacySettings,
@@ -398,6 +398,20 @@ export class AccountService {
       .returning();
     if (!rows.length)
       throw new DomainError("not_found", "Session not found", 404);
+  }
+  async revokeOtherSessions(userId: string, authSessionId: string) {
+    const rows = await this.db
+      .update(userSessions)
+      .set({ revokedAt: new Date() })
+      .where(
+        and(
+          eq(userSessions.userId, userId),
+          ne(userSessions.authSessionId, authSessionId),
+          isNull(userSessions.revokedAt),
+        ),
+      )
+      .returning({ id: userSessions.id });
+    return rows.map((row) => row.id);
   }
   async realtimeIdentity(userId: string, authSessionId: string) {
     const [row] = await this.db

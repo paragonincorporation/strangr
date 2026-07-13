@@ -186,9 +186,6 @@ export class EntitlementService {
     return true;
   }
   catalog() {
-    return this.db
-      .select()
-      .from(subscriptionPlans)
-      .where(eq(subscriptionPlans.active, true));
+    return this.db.select().from(subscriptionPlans);
   }
 }

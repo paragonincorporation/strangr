@@ -396,6 +396,69 @@ export const userSessions = pgTable(
   ],
 );
 
+export const privacyRequestStateEnum = pgEnum("privacy_request_state", [
+  "pending",
+  "processing",
+  "ready",
+  "canceled",
+  "completed",
+  "failed",
+]);
+export const privacyExportRequests = pgTable(
+  "privacy_export_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    state: privacyRequestStateEnum("state").notNull().default("pending"),
+    archiveKey: text("archive_key"),
+    downloadTokenHash: text("download_token_hash"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    failureCode: text("failure_code"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("privacy_exports_pending_idx").on(table.state, table.createdAt),
+    index("privacy_exports_expiry_idx").on(table.expiresAt),
+  ],
+);
+
+export const deletionRequests = pgTable(
+  "deletion_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: "cascade" }),
+    state: privacyRequestStateEnum("state").notNull().default("pending"),
+    requestedAt: timestamp("requested_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    cancelUntil: timestamp("cancel_until", { withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    retentionUntil: timestamp("retention_until", {
+      withTimezone: true,
+    }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("deletion_requests_due_idx").on(table.state, table.cancelUntil),
+  ],
+);
+
 export const avatarUploadStateEnum = pgEnum("avatar_upload_state", [
   "pending",
   "processing",

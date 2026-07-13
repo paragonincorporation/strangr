@@ -9,6 +9,7 @@ import {
 } from "@paramingle/database";
 import { AvatarService, SupabaseStorage } from "./avatar-service.js";
 import { BillingService } from "./billing-service.js";
+import { PrivacyService } from "./privacy-service.js";
 
 const config = parseServerConfig(process.env);
 const { db, pool } = createDatabase(config.DATABASE_URL);
@@ -29,6 +30,14 @@ const billing = new BillingService(
   config.STRIPE_SECRET_KEY,
   config.STRIPE_WEBHOOK_SECRET,
   config.WEB_ALLOWED_ORIGINS[0]!,
+);
+const privacy = new PrivacyService(
+  db,
+  new SupabaseStorage(
+    config.SUPABASE_URL,
+    config.SUPABASE_STORAGE_BUCKET,
+    config.SUPABASE_SERVICE_ROLE_KEY,
+  ),
 );
 const dryRun = process.argv.includes("--dry-run");
 const intervalMs = Number(process.env.WORKER_HEARTBEAT_MS || 30_000);
@@ -69,6 +78,7 @@ const run = async (): Promise<boolean> => {
     );
     const expiredSanctions = dryRun ? [] : await moderation.expire();
     const reconciledSubscriptions = dryRun ? 0 : await billing.reconcile();
+    const privacyRetention = await privacy.process(25, new Date(), dryRun);
     console.info(
       JSON.stringify({
         service: "paramingle-worker",
@@ -80,6 +90,7 @@ const run = async (): Promise<boolean> => {
         callRetention,
         expiredSanctions: expiredSanctions.length,
         reconciledSubscriptions,
+        privacyRetention,
         timestamp: new Date().toISOString(),
       }),
     );

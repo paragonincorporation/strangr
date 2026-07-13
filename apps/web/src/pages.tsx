@@ -1180,6 +1180,50 @@ export function SettingsPage() {
     await api(`/v1/me/sessions/${id}`, { method: "DELETE" });
     await load();
   };
+  const revokeOthers = async () => {
+    try {
+      const result = await api<{ revoked: number }>(
+        "/v1/me/sessions/revoke-others",
+        { method: "POST" },
+      );
+      setMessage(`Signed out ${result.revoked} other session(s).`);
+      await load();
+    } catch (err) {
+      setMessage(
+        err instanceof Error ? err.message : "Could not revoke sessions",
+      );
+    }
+  };
+  const requestExport = async () => {
+    try {
+      await api("/v1/privacy/export", {
+        method: "POST",
+        body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
+      });
+      setMessage(
+        "Your export request is queued. We will make it available here when ready.",
+      );
+    } catch (err) {
+      setMessage(
+        err instanceof Error ? err.message : "Could not request an export",
+      );
+    }
+  };
+  const requestDeletion = async () => {
+    try {
+      const result = await api<{ cancelUntil: string }>("/v1/privacy/delete", {
+        method: "POST",
+        body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
+      });
+      setMessage(
+        `Deletion is pending. You can cancel it until ${new Date(result.cancelUntil).toLocaleString()}.`,
+      );
+    } catch (err) {
+      setMessage(
+        err instanceof Error ? err.message : "Could not start deletion",
+      );
+    }
+  };
   const signOut = async () => {
     await supabase?.auth.signOut();
     setMessage("Signed out.");
@@ -1244,6 +1288,9 @@ export function SettingsPage() {
         <Button onClick={() => void load()} variant="quiet">
           Load signed-in devices
         </Button>
+        <Button onClick={() => void revokeOthers()} variant="quiet">
+          Sign out other sessions
+        </Button>
         <ul>
           {sessions.map((item) => (
             <li key={item.id}>
@@ -1259,6 +1306,17 @@ export function SettingsPage() {
             </li>
           ))}
         </ul>
+        <h3>Your data</h3>
+        <p>
+          Exports exclude other people’s private data, moderation notes, fraud
+          signals, and secrets.
+        </p>
+        <Button onClick={() => void requestExport()} variant="secondary">
+          Request data export
+        </Button>
+        <Button onClick={() => void requestDeletion()} variant="danger">
+          Request account deletion
+        </Button>
         <p role="status">{message}</p>
       </Card>
       <Card>

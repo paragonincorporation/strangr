@@ -41,6 +41,8 @@ import {
   checkoutRequestSchema,
   manualEntitlementGrantSchema,
   manualEntitlementRevokeSchema,
+  privacyDeletionRequestSchema,
+  privacyExportRequestSchema,
 } from "@paramingle/contracts";
 import {
   BlockRepository,
@@ -70,6 +72,8 @@ import {
 import { AvatarService, SupabaseStorage } from "./avatar-service.js";
 import { BillingService } from "./billing-service.js";
 import { AbuseProtection } from "./abuse-service.js";
+import { PrivacyService } from "./privacy-service.js";
+import { Observability, redactLogValue } from "./observability.js";
 import {
   RedisRealtimeStore,
   textSkipCooldown,
@@ -107,11 +111,16 @@ export interface CreateAppOptions {
   entitlements?: EntitlementService;
   billing?: BillingService;
   abuse?: AbuseProtection;
+  privacy?: PrivacyService;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
   const config = options.config ?? parseServerConfig(process.env);
   const app = Fastify({ logger: { level: config.LOG_LEVEL } });
+  const observability = new Observability({
+    environment: config.DEPLOYMENT_ENVIRONMENT,
+    revision: config.DEPLOYMENT_REVISION,
+  });
   const allowedOrigins = new Set([
     ...config.WEB_ALLOWED_ORIGINS,
     ...config.ADMIN_ALLOWED_ORIGINS,
@@ -131,7 +140,8 @@ export function createApp(options: CreateAppOptions = {}) {
     options.moderation &&
     options.launch &&
     options.matchingPreferences &&
-    options.engagement
+    options.engagement &&
+    options.privacy
       ? null
       : createDatabase(config.DATABASE_URL);
   const encryptor = createAesGcmFieldEncryptor(
@@ -187,6 +197,16 @@ export function createApp(options: CreateAppOptions = {}) {
       config.TURNSTILE_SECRET_KEY,
       config.TURNSTILE_ALLOWED_HOSTNAMES,
     );
+  const privacy =
+    options.privacy ??
+    new PrivacyService(
+      connection!.db,
+      new SupabaseStorage(
+        config.SUPABASE_URL,
+        config.SUPABASE_STORAGE_BUCKET,
+        config.SUPABASE_SERVICE_ROLE_KEY,
+      ),
+    );
   const countryFromRequest = (request: FastifyRequest) => {
     const value = request.headers[config.COUNTRY_HEADER_NAME];
     const candidate = Array.isArray(value) ? value[0] : value;
@@ -237,6 +257,41 @@ export function createApp(options: CreateAppOptions = {}) {
     methods: ["GET", "HEAD", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["authorization", "content-type", "x-device-label"],
     maxAge: 600,
+  });
+  app.addHook("onSend", async (_request, reply, payload) => {
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("X-Frame-Options", "DENY");
+    reply.header("Referrer-Policy", "strict-origin-when-cross-origin");
+    reply.header(
+      "Permissions-Policy",
+      "camera=(self), microphone=(self), geolocation=(), payment=(self)",
+    );
+    reply.header("Cross-Origin-Opener-Policy", "same-origin");
+    reply.header(
+      "Content-Security-Policy",
+      "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'",
+    );
+    return payload;
+  });
+  app.addHook("onResponse", async (request, reply) => {
+    observability.increment(
+      `http.${request.method.toLowerCase()}.${Math.floor(reply.statusCode / 100)}xx`,
+    );
+  });
+  app.setErrorHandler((cause, request, reply) => {
+    observability.increment("application_error");
+    request.log.error(
+      redactLogValue(
+        observability.error(cause, {
+          requestId: request.id,
+          method: request.method,
+          path: request.routeOptions.url,
+        }),
+      ),
+    );
+    void reply
+      .code(500)
+      .send(error("internal_error", "Request failed", request.id));
   });
   void app.register(rawBody, {
     field: "rawBody",
@@ -425,6 +480,13 @@ export function createApp(options: CreateAppOptions = {}) {
           .send(error("forbidden", "Admin permission required", request.id));
       }
     };
+  app.get("/health/metrics", { preHandler: adminGuard("admin") }, () => ({
+    tags: {
+      environment: config.DEPLOYMENT_ENVIRONMENT,
+      revision: config.DEPLOYMENT_REVISION,
+    },
+    counters: observability.snapshot(),
+  }));
   const route =
     <T>(
       schema: z.ZodType<T>,
@@ -663,6 +725,85 @@ export function createApp(options: CreateAppOptions = {}) {
         return reply.code(204).send();
       } catch (e) {
         return domainReply(reply, req.id, e);
+      }
+    },
+  );
+  app.post(
+    "/v1/me/sessions/revoke-others",
+    { preHandler: guard("inspect_self") },
+    async (req, reply) => {
+      try {
+        const ids = await accounts.revokeOtherSessions(
+          req.auth!.user.id,
+          req.auth!.identity.authSessionId,
+        );
+        await Promise.all(ids.map((id) => realtime.revokeSession(id)));
+        return { revoked: ids.length };
+      } catch (cause) {
+        return domainReply(reply, req.id, cause);
+      }
+    },
+  );
+  const requireRecentReauthentication = (request: FastifyRequest) => {
+    const authenticatedAt = request.auth!.identity.authenticatedAt;
+    if (!authenticatedAt || Date.now() / 1000 - authenticatedAt > 5 * 60)
+      throw new DomainError(
+        "reauthentication_required",
+        "Recent reauthentication is required for this privacy action",
+        403,
+      );
+  };
+  app.get("/v1/privacy/exports", { preHandler: guard("inspect_self") }, (req) =>
+    privacy.exportStatus(req.auth!.user.id),
+  );
+  app.post(
+    "/v1/privacy/export",
+    { preHandler: guard("inspect_self") },
+    route(privacyExportRequestSchema, async (req) => {
+      requireRecentReauthentication(req);
+      return privacy.requestExport(req.auth!.user.id);
+    }),
+  );
+  app.get(
+    "/v1/privacy/exports/:id/download",
+    { preHandler: guard("inspect_self") },
+    async (req, reply) => {
+      try {
+        return await privacy.download(
+          req.auth!.user.id,
+          (req.params as { id: string }).id,
+        );
+      } catch (cause) {
+        return domainReply(reply, req.id, cause);
+      }
+    },
+  );
+  app.post(
+    "/v1/privacy/delete",
+    { preHandler: guard("inspect_self") },
+    route(privacyDeletionRequestSchema, async (req) => {
+      requireRecentReauthentication(req);
+      const result = await privacy.requestDeletion(req.auth!.user.id);
+      await Promise.all(
+        result.sessionIds.map((id) => realtime.revokeSession(id)),
+      );
+      await realtime.revokeUser(req.auth!.user.id);
+      return {
+        id: result.id,
+        state: result.state,
+        cancelUntil: result.cancelUntil,
+      };
+    }),
+  );
+  app.post(
+    "/v1/privacy/delete/cancel",
+    { preHandler: guard("inspect_self") },
+    async (req, reply) => {
+      try {
+        requireRecentReauthentication(req);
+        return await privacy.cancelDeletion(req.auth!.user.id);
+      } catch (cause) {
+        return domainReply(reply, req.id, cause);
       }
     },
   );

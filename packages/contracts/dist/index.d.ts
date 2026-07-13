@@ -49,6 +49,7 @@ export declare const errorCodeSchema: z.ZodEnum<{
     cooldown_active: "cooldown_active";
     age_restricted: "age_restricted";
     country_unavailable: "country_unavailable";
+    reauthentication_required: "reauthentication_required";
 }>;
 export declare const errorEnvelopeSchema: z.ZodObject<{
     error: z.ZodObject<{
@@ -76,6 +77,7 @@ export declare const errorEnvelopeSchema: z.ZodObject<{
             cooldown_active: "cooldown_active";
             age_restricted: "age_restricted";
             country_unavailable: "country_unavailable";
+            reauthentication_required: "reauthentication_required";
         }>;
         message: z.ZodString;
         requestId: z.ZodString;
@@ -128,6 +130,12 @@ export declare const healthResponseSchema: z.ZodObject<{
             "not-configured": "not-configured";
         }>;
     }, z.core.$strip>>;
+}, z.core.$strip>;
+export declare const privacyExportRequestSchema: z.ZodObject<{
+    idempotencyKey: z.ZodString;
+}, z.core.$strip>;
+export declare const privacyDeletionRequestSchema: z.ZodObject<{
+    idempotencyKey: z.ZodString;
 }, z.core.$strip>;
 export declare const accountSchema: z.ZodObject<{
     id: z.ZodUUID;
@@ -861,6 +869,7 @@ export declare const serverRealtimeEnvelopeSchema: z.ZodDiscriminatedUnion<[z.Zo
             cooldown_active: "cooldown_active";
             age_restricted: "age_restricted";
             country_unavailable: "country_unavailable";
+            reauthentication_required: "reauthentication_required";
         }>;
         message: z.ZodString;
         details: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;

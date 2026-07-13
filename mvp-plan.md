@@ -969,17 +969,37 @@ Update this table after every completed task. Keep evidence concise and link rep
 | 14. Moderation operations | blocked     | Codex       | Run 6 SLA queue/evidence/templates/sanction operations    | H12 policy approval, MFA choice, staffing, training     |
 | 15. Anti-bot/spam         | in_progress | Codex       | Run 6 Turnstile validation/scoped limits/repeat detection | H13 widgets, thresholds, friction and staging approval  |
 | 16. NSFW signals          | blocked     | unassigned  | None                                                      | Manual model/privacy approval                           |
-| 17. Privacy operations    | not_started | unassigned  | Partial session/account foundations                       | Inventory gaps after Task 0                             |
-| 18. Observability/cost    | not_started | unassigned  | Health endpoints exist                                    | Choose providers and implement redaction/metrics        |
-| 19. Hardening             | not_started | unassigned  | Current quality foundation                                | Begins after feature-complete release candidate         |
+| 17. Privacy operations    | in_progress | Codex       | Run 7 privacy request workflow, worker, session controls  | H15 approves retention, delivery, deletion handling     |
+| 18. Observability/cost    | in_progress | Codex       | Run 7 redacted structured telemetry boundary and runbook  | H16 selects providers, budgets, ceilings, and alerts    |
+| 19. Hardening             | in_progress | Codex       | Run 7 HTTP hardening headers and regression coverage      | H17 independent security/accessibility review           |
 | 20. E2E/load              | not_started | unassigned  | Basic Playwright/integration config                       | Expand throughout Tasks 4-19                            |
 | 21. Deploy/rehearse       | not_started | unassigned  | Vercel/Render manifests exist                             | Requires staging providers and feature completion       |
 
 ### Current handoff
 
-Tasks 0, 4, 5, and 6 are complete. Tasks 2-3 and 7-13 have complete agent implementations but remain `in_progress` on their recorded human approvals/provider staging work. Task 14's agent work is complete but the task remains blocked on H12 policy approval and staffed moderation operations. Task 15's agent work is complete and remains `in_progress` on H13 Turnstile configuration, threshold approval, and real-service validation. Paid plans remain disabled in the seeded catalog, and the UI labels them unavailable, until H11 is recorded. Task 16 remains blocked on H14 model/privacy approval. The exact next unblocked agent implementation task is Task 17, privacy operations.
+Tasks 0, 4, 5, and 6 are complete. Tasks 2-3 and 7-13 have complete agent implementations but remain `in_progress` on their recorded human approvals/provider staging work. Task 14's agent work is complete but the task remains blocked on H12 policy approval and staffed moderation operations. Task 15's agent work is complete and remains `in_progress` on H13 Turnstile configuration, threshold approval, and real-service validation. Paid plans remain disabled in the seeded catalog, and the UI labels them unavailable, until H11 is recorded. Task 16 remains blocked on H14 model/privacy approval. Tasks 17-19 now have their initial agent implementation, but remain `in_progress` on H15-H17 approval, provider, staging, and independent-review dependencies. The exact next agent task is Task 20, integration, E2E, and load coverage.
 
 ## 16. Progress updates
+
+### Run 7: privacy operations, observability baseline, and browser hardening
+
+Date: July 13, 2026
+Status: agent implementation complete; human launch dependencies remain
+
+#### Tasks 17-19 implementation
+
+- Added migration `0011_privacy_operations.sql`, durable export/deletion request state, authenticated export requests and short-lived signed downloads, a bounded idempotent worker pass, deletion cancellation, recent-reauthentication checks, active-subscription handling, immediate account contact disablement, session revocation, and policy-placeholder anonymization. Export payloads are deliberately limited to the requester’s account/profile/session/encounter metadata; they exclude other-user private data, moderation material, fraud signals, secrets, message bodies, and media.
+- Completed the session controls with revoke-one and sign-out-other-sessions routes plus Settings UI. Settings also provides export/deletion request controls. A deletion revokes every local/realtime session and removes queues/live contact before its cancellation window expires.
+- Added a provider-neutral observability boundary with environment/revision tags, recursive sensitive-field redaction tests, safe counter snapshots behind the AAL2 admin boundary, request outcome counters, structured application-error logging, and an alert-to-runbook map in `docs/operations/observability-runbook.md`. Provider projects, exports, budgets, alert routing, and capacity ceilings remain deliberately unconfigured pending H16 and Task 20 evidence.
+- Applied API security headers (CSP, frame denial, MIME sniffing prevention, permissions policy, referrer policy, and cross-origin isolation), preserved exact HTTP/WebSocket origin handling and single-use ticket behavior, and added regression coverage for headers and log redaction. Existing typed contracts, parameterized Drizzle access, raster-only avatar processing, SVG rejection, raw-body Stripe verification, and admin AAL2 guards remain the reviewed boundaries.
+
+Files changed: `packages/database/src/schema.ts`, `packages/database/migrations/0011_privacy_operations.sql`, `packages/database/migrations/meta/_journal.json`, `packages/contracts/src/index.ts`, `apps/api/src/privacy-service.ts`, `apps/api/src/observability.ts`, `apps/api/src/account-service.ts`, `apps/api/src/app.ts`, `apps/api/src/worker.ts`, `apps/api/src/app.test.ts`, `apps/api/src/observability.test.ts`, `apps/web/src/pages.tsx`, `docs/operations/observability-runbook.md`, and this plan.
+
+Verification: contracts and database builds, API typecheck, migration validation (11 migrations), API tests (19), web tests (10), API lint, and format checks were run. Redis was unavailable, so the API correctly reported degraded readiness and real Redis/PostgreSQL/browser/provider validation remains required.
+
+Remaining risks: H15 must approve the retention schedule, export delivery/identity proof, cancellation window, subscription/legal-hold treatment, and anonymization rules before public use; the current seven-day cancellation and 30-day retention defaults are placeholders. H16 must select monitoring/analytics/paging providers, configure actual alerts/budgets and approve ceilings after Task 20 load evidence. H17 must obtain independent penetration and manual accessibility review; current automated tests cannot certify cross-browser media/device behavior or a complete security assessment.
+
+Exact next agent task: Task 20, build integration, E2E, and load coverage. Task 16 remains blocked until H14 approves the model, license, privacy design, user notice, and enabled countries.
 
 ### Run 6: premium UI, moderation operations, and anti-abuse controls
 
@@ -1569,6 +1589,8 @@ Status: `not_started`
 5. Test export and deletion with active friendships, calls, reports, sanctions, and subscriptions.
 6. Define the process for privacy requests received through support or legal channels.
 7. Record counsel/privacy-owner approval.
+8. Approve or replace Run 7's provisional seven-day cancellation window and 30-day deletion-request retention; approve the worker-generated signed-download delivery process and archive expiry.
+9. Create and restrict the private export storage bucket used by the service role. Confirm signed URLs expire after five minutes, archives after 24 hours, and archive keys/tokens never enter logs or support tickets.
 
 Completion evidence: unassigned
 
@@ -1585,6 +1607,7 @@ Status: `not_started`
 6. Set monthly and anomaly budgets for Render, Supabase, Redis, TURN, email, storage, Stripe, and monitoring.
 7. Test every severity-one alert and escalation route.
 8. Record provider ownership, dashboards, retention, and budget thresholds in the private register.
+9. Implement the alert-to-runbook mapping in `docs/operations/observability-runbook.md`; verify the AAL2 admin metrics endpoint is not exposed to public users and that redaction is retained in the selected provider.
 
 Completion evidence: unassigned
 
@@ -1600,6 +1623,7 @@ Status: `not_started`
 5. Arrange a manual accessibility review covering keyboard, screen readers, contrast, reduced motion, permissions, call controls, and admin flows.
 6. Record accepted lower-risk findings with owner and deadline.
 7. Do not open unrestricted public traffic with an unresolved critical/high finding.
+8. Include Run 7's deletion/session revocation, export authorization, signed archive expiry, CSP/headers, WebSocket ticket/origin checks, Stripe raw-body verification, and profile/message rendering in the independent review scope.
 
 Completion evidence: unassigned
 

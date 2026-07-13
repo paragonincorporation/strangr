@@ -71,4 +71,15 @@ describe("API foundation", () => {
     });
     expect(rejected.headers["access-control-allow-origin"]).toBeUndefined();
   });
+
+  test("sets browser hardening headers without exposing response details", async () => {
+    const app = createApp();
+    apps.push(app);
+    const response = await app.inject({ method: "GET", url: "/health/live" });
+    expect(response.headers["x-content-type-options"]).toBe("nosniff");
+    expect(response.headers["x-frame-options"]).toBe("DENY");
+    expect(response.headers["content-security-policy"]).toContain(
+      "frame-ancestors 'none'",
+    );
+  });
 });
