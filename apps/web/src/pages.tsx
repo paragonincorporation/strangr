@@ -134,12 +134,230 @@ export function LandingPage() {
   );
 }
 
+type PlanKey = "free" | "lite" | "loaded" | "maxed_out";
+type CatalogPlan = {
+  key: PlanKey;
+  name: string;
+  monthlyPriceCents: number;
+  currency: string;
+  purchasable: boolean;
+};
+const V1_BENEFITS: Record<PlanKey, string[]> = {
+  free: [
+    "Text and video matching",
+    "Country, language, and interests filters",
+    "Friends, messages, and calls",
+  ],
+  lite: ["Everything in Free", "Gender preference", "Online-status display"],
+  loaded: [
+    "Everything in Lite",
+    "Premium media target up to FHD",
+    "Reconnect previous eligible match",
+    "Profile cosmetics and supporter badge",
+  ],
+  maxed_out: [
+    "Everything in Loaded",
+    "Capped queue priority",
+    "Safe call-card viewing",
+    "Early access and direct support",
+  ],
+};
+const V2_BENEFITS = [
+  "ParamPoints and XP",
+  "Quests, levels, and streak rewards",
+  "Daily subscription grants",
+];
+
+export function PremiumPage() {
+  const [plans, setPlans] = useState<CatalogPlan[]>([]);
+  const [account, setAccount] = useState<{
+    planKey: PlanKey;
+    subscription: null | {
+      status: string;
+      currentPeriodEnd: string | null;
+      cancelAtPeriodEnd: boolean;
+    };
+  }>();
+  const [state, setState] = useState<"loading" | "ready" | "unavailable">(
+    "loading",
+  );
+  const [busy, setBusy] = useState<string>();
+  const [params] = useSearchParams();
+  useEffect(() => {
+    void Promise.all([
+      api<{ items: CatalogPlan[] }>("/v1/catalog/plans"),
+      api<{
+        planKey: PlanKey;
+        subscription: null | {
+          status: string;
+          currentPeriodEnd: string | null;
+          cancelAtPeriodEnd: boolean;
+        };
+      }>("/v1/me/entitlements"),
+    ])
+      .then(([catalog, entitlement]) => {
+        setPlans(catalog.items);
+        setAccount(entitlement);
+        setState("ready");
+      })
+      .catch(() => setState("unavailable"));
+  }, []);
+  const redirect = async (path: string, body?: object) => {
+    setBusy(path);
+    try {
+      const result = await api<{ url: string }>(path, {
+        method: "POST",
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+      location.assign(result.url);
+    } catch {
+      setState("unavailable");
+      setBusy(undefined);
+    }
+  };
+  if (state === "loading") return <RouteState kind="loading" />;
+  return (
+    <main className="premium-page" id="main-content">
+      <header className="page-heading">
+        <p className="eyebrow">PLANS</p>
+        <h1>Choose what fits.</h1>
+        <p>Monthly USD pricing. Cancel from the billing portal at any time.</p>
+      </header>
+      {params.get("checkout") === "processing" ? (
+        <p role="status">
+          Payment is processing. Access changes only after provider
+          confirmation.
+        </p>
+      ) : null}
+      {state === "unavailable" ? (
+        <Card>
+          <h2>Billing provider unavailable</h2>
+          <p>Your current access is unchanged. Try again later.</p>
+        </Card>
+      ) : null}
+      {account ? (
+        <Card>
+          <h2>Current plan: {account.planKey.replace("_", " ")}</h2>
+          {account.subscription ? (
+            <p>
+              Status: {account.subscription.status.replace("_", " ")}.{" "}
+              {account.subscription.cancelAtPeriodEnd
+                ? `Cancels after ${account.subscription.currentPeriodEnd ? new Date(account.subscription.currentPeriodEnd).toLocaleDateString() : "the paid period"}.`
+                : account.subscription.currentPeriodEnd
+                  ? `Renews ${new Date(account.subscription.currentPeriodEnd).toLocaleDateString()}.`
+                  : ""}
+            </p>
+          ) : (
+            <p>No paid subscription.</p>
+          )}
+          {account.subscription ? (
+            <Button
+              disabled={Boolean(busy)}
+              onClick={() => void redirect("/v1/billing/portal")}
+            >
+              Manage or cancel subscription
+            </Button>
+          ) : null}
+        </Card>
+      ) : null}
+      <section className="premium-grid" aria-label="Plan and price comparison">
+        {plans.map((plan) => (
+          <Card key={plan.key}>
+            <h2>{plan.name}</h2>
+            <p>
+              <strong>
+                {new Intl.NumberFormat("en-US", {
+                  style: "currency",
+                  currency: plan.currency,
+                }).format(plan.monthlyPriceCents / 100)}
+              </strong>{" "}
+              / month
+            </p>
+            <h3>Included in V1</h3>
+            <ul>
+              {V1_BENEFITS[plan.key].map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+            {plan.key !== "free" && account?.planKey !== plan.key ? (
+              <Button
+                disabled={!plan.purchasable || Boolean(busy)}
+                onClick={() =>
+                  void redirect("/v1/billing/checkout", {
+                    planKey: plan.key,
+                    idempotencyKey: crypto.randomUUID(),
+                  })
+                }
+              >
+                {plan.purchasable ? `Choose ${plan.name}` : "Not available yet"}
+              </Button>
+            ) : (
+              <Badge tone="success">Current access</Badge>
+            )}
+          </Card>
+        ))}
+      </section>
+      <Card>
+        <h2>Coming in V2</h2>
+        <p>These are not active paid benefits.</p>
+        <ul>
+          {V2_BENEFITS.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </Card>
+    </main>
+  );
+}
+
+function TurnstileChallenge({
+  action,
+  onToken,
+}: {
+  action: "signup" | "recovery";
+  onToken: (token: string) => void;
+}) {
+  const container = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const sitekey = String(import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "");
+    if (!sitekey || !container.current) return;
+    const win = window as typeof window & {
+      turnstile?: {
+        render: (
+          element: HTMLElement,
+          options: Record<string, unknown>,
+        ) => string;
+      };
+    };
+    const render = () => {
+      if (container.current && win.turnstile)
+        win.turnstile.render(container.current, {
+          sitekey,
+          action,
+          callback: onToken,
+          "expired-callback": () => onToken(""),
+        });
+    };
+    if (win.turnstile) render();
+    else {
+      const script = document.createElement("script");
+      script.src =
+        "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.onload = render;
+      document.head.append(script);
+    }
+  }, [action, onToken]);
+  return <div aria-label="Anti-abuse challenge" ref={container} />;
+}
+
 export function AuthPage() {
   const [mode, setMode] = useState<"sign_in" | "sign_up" | "reset">("sign_in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const submit = async (event: React.FormEvent) => {
@@ -152,16 +370,22 @@ export function AuthPage() {
     setMessage("");
     try {
       if (mode === "reset") {
+        if (!captchaToken) throw new Error("Complete the anti-abuse challenge");
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `${location.origin}/auth/sign-in`,
+          captchaToken,
         });
         if (error) throw error;
         setMessage("Check your email for a password reset link.");
       } else if (mode === "sign_up") {
+        if (!captchaToken) throw new Error("Complete the anti-abuse challenge");
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: `${location.origin}/auth/sign-in` },
+          options: {
+            emailRedirectTo: `${location.origin}/auth/sign-in`,
+            captchaToken,
+          },
         });
         if (error) throw error;
         setMessage("Check your email to verify your account.");
@@ -220,6 +444,12 @@ export function AuthPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               value={password}
+            />
+          ) : null}
+          {mode !== "sign_in" ? (
+            <TurnstileChallenge
+              action={mode === "reset" ? "recovery" : "signup"}
+              onToken={setCaptchaToken}
             />
           ) : null}
           <Button disabled={busy} fullWidth type="submit">

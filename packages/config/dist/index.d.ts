@@ -36,6 +36,8 @@ declare const commonServerSchema: z.ZodObject<{
     TURN_CREDENTIAL_SECRET: z.ZodString;
     STRIPE_SECRET_KEY: z.ZodString;
     STRIPE_WEBHOOK_SECRET: z.ZodString;
+    TURNSTILE_SECRET_KEY: z.ZodString;
+    TURNSTILE_ALLOWED_HOSTNAMES: z.ZodPipe<z.ZodPipe<z.ZodString, z.ZodTransform<string[], string>>, z.ZodArray<z.ZodString>>;
     DEPLOYMENT_ENVIRONMENT: z.ZodString;
     DEPLOYMENT_REVISION: z.ZodString;
     OPENAPI_ENABLED: z.ZodPipe<z.ZodDefault<z.ZodEnum<{

@@ -32,7 +32,7 @@ describe("admin application shell", () => {
     ).toBeInTheDocument();
   });
 
-  test("case route keeps privileged actions disabled", () => {
+  test("case route exposes a reason-gated privileged action", () => {
     render(
       <AdminApp router={createAdminMemoryRouter(["/admin/cases/preview"])} />,
     );
@@ -42,5 +42,6 @@ describe("admin application shell", () => {
     expect(
       screen.getByRole("button", { name: "Apply sanction" }),
     ).toBeDisabled();
+    expect(screen.getByLabelText("Documented reason")).toBeVisible();
   });
 });

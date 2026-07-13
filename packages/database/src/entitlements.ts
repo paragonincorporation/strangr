@@ -212,9 +212,6 @@ export class EntitlementService {
   }
 
   catalog() {
-    return this.db
-      .select()
-      .from(subscriptionPlans)
-      .where(eq(subscriptionPlans.active, true));
+    return this.db.select().from(subscriptionPlans);
   }
 }

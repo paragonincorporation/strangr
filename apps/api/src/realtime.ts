@@ -239,6 +239,18 @@ export class RedisRealtimeStore {
       retryAfterMs: await this.client.pTTL(key),
     };
   }
+  async repeatedContent(
+    scope: string,
+    content: string,
+    limit = 4,
+    windowSeconds = 60,
+  ) {
+    const digest = createHash("sha256")
+      .update(content.normalize("NFC").trim().toLocaleLowerCase())
+      .digest("hex")
+      .slice(0, 24);
+    return this.rateLimit(`repeat:${scope}:${digest}`, limit, windowSeconds);
+  }
   async joinQueue(
     identity: RealtimeIdentity,
     mode: MatchMode,

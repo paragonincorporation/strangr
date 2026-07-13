@@ -30,6 +30,17 @@ describe("web application shell", () => {
     ).toBeVisible();
   });
 
+  test("replaces the premium placeholder with an honest provider state", async () => {
+    render(<WebApp router={createWebMemoryRouter(["/app/premium"])} />);
+    expect(
+      await screen.findByRole("heading", { name: "Choose what fits." }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Billing provider unavailable" }),
+    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Coming in V2" })).toBeVisible();
+  });
+
   test("offers text fallback when video permission is denied", async () => {
     const user = userEvent.setup();
     render(

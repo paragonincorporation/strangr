@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { Database } from "./client.js";
 import {
   adminAuditLogs,
@@ -27,6 +27,7 @@ const roleRank: Record<AdminRole, number> = {
   superadmin: 4,
 };
 const RETENTION_MS = 365 * 24 * 60 * 60 * 1_000;
+const ESCALATION_MINUTES = { standard: 24 * 60, high: 60, urgent: 15 } as const;
 
 export class ModerationRepository {
   constructor(private readonly db: Database) {}
@@ -240,7 +241,10 @@ export class ModerationRepository {
               : undefined,
           ),
         )
-        .orderBy(desc(moderationCases.createdAt))
+        .orderBy(
+          sql`case ${moderationCases.priority} when 'urgent' then 0 when 'high' then 1 else 2 end`,
+          asc(moderationCases.createdAt),
+        )
         .limit(100);
       await tx.insert(adminAuditLogs).values({
         actorId,
@@ -251,7 +255,15 @@ export class ModerationRepository {
         result: "success",
         changeSummary: { count: items.length },
       });
-      return items;
+      return items.map((item) => ({
+        ...item,
+        escalationDueAt: new Date(
+          item.createdAt.getTime() + ESCALATION_MINUTES[item.priority] * 60_000,
+        ),
+        escalationOverdue:
+          Date.now() >
+          item.createdAt.getTime() + ESCALATION_MINUTES[item.priority] * 60_000,
+      }));
     });
   }
 
@@ -286,6 +298,7 @@ export class ModerationRepository {
               id: reportEvidence.id,
               excerpt: reportEvidence.excerpt,
               retentionReason: reportEvidence.retentionReason,
+              expiresAt: reportEvidence.expiresAt,
             })
             .from(reportEvidence)
             .where(eq(reportEvidence.reportId, item.reportId))

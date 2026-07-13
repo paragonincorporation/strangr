@@ -52,6 +52,8 @@ export function QueuePage() {
           priority: string;
           state: string;
           createdAt: string;
+          escalationDueAt: string;
+          escalationOverdue: boolean;
         }>
       >(`/v1/admin/cases?purpose=${encodeURIComponent(purpose)}`),
     enabled: purpose.length >= 8,
@@ -98,6 +100,10 @@ export function QueuePage() {
           </div>
           <h2>{item.reason.replaceAll("_", " ")}</h2>
           <p>{new Date(item.createdAt).toLocaleString()}</p>
+          <p role={item.escalationOverdue ? "alert" : undefined}>
+            {item.escalationOverdue ? "Escalation overdue" : "Escalation due"}:{" "}
+            {new Date(item.escalationDueAt).toLocaleString()}
+          </p>
           <Link
             to={`/admin/cases/${item.id}?purpose=${encodeURIComponent(purpose)}`}
           >
@@ -263,6 +269,9 @@ export function CasePage() {
     new URLSearchParams(location.search).get("purpose") ??
     "Review assigned safety report";
   const [reveal, setReveal] = useState(false);
+  const [sanctionType, setSanctionType] = useState("warning");
+  const [reason, setReason] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
   const detail = useQuery({
     queryKey: ["case", caseId, purpose, reveal],
     queryFn: () =>
@@ -275,6 +284,27 @@ export function CasePage() {
       }>(
         `/v1/admin/cases/${caseId}?purpose=${encodeURIComponent(purpose)}&revealEvidence=${reveal}`,
       ),
+  });
+  const sanction = useMutation({
+    mutationFn: () =>
+      adminApi(`/v1/admin/cases/${caseId}/sanctions`, {
+        method: "POST",
+        body: JSON.stringify({
+          type: sanctionType,
+          permanent: false,
+          reason,
+          evidenceReferences: [],
+          purpose: "Apply documented moderation action",
+          ...(sanctionType === "warning" ||
+          sanctionType === "profile_removal" ||
+          sanctionType === "verification_challenge"
+            ? {}
+            : {
+                endsAt: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+              }),
+        }),
+      }),
+    onSuccess: () => setActionMessage("Sanction applied and audited."),
   });
   return (
     <div className="admin-stack">
@@ -311,9 +341,44 @@ export function CasePage() {
             action, a sufficiently privileged role, recent MFA, and a successful
             audit write.
           </p>
-          <Button disabled variant="danger">
+          <Select
+            label="Sanction type"
+            value={sanctionType}
+            onChange={(event) => setSanctionType(event.target.value)}
+          >
+            <option value="warning">Warning</option>
+            <option value="matching_restriction">
+              24-hour matching restriction
+            </option>
+            <option value="contact_restriction">
+              24-hour contact restriction
+            </option>
+            <option value="temporary_suspension">24-hour suspension</option>
+            <option value="profile_removal">Profile removal</option>
+            <option value="verification_challenge">
+              Verification challenge
+            </option>
+          </Select>
+          <Input
+            label="Documented reason"
+            minLength={10}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+          />
+          <Button
+            disabled={reason.trim().length < 10 || sanction.isPending}
+            onClick={() => sanction.mutate()}
+            variant="danger"
+          >
             Apply sanction
           </Button>
+          {sanction.error ? (
+            <p role="alert">
+              {sanction.error.message}. Recent MFA reauthentication may be
+              required.
+            </p>
+          ) : null}
+          {actionMessage ? <p role="status">{actionMessage}</p> : null}
         </Card>
       </div>
     </div>

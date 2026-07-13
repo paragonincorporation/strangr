@@ -73,6 +73,14 @@ const commonServerSchema = z.object({
     TURN_CREDENTIAL_SECRET: z.string().min(32),
     STRIPE_SECRET_KEY: z.string().startsWith("sk_"),
     STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_"),
+    TURNSTILE_SECRET_KEY: z.string().min(1),
+    TURNSTILE_ALLOWED_HOSTNAMES: z
+        .string()
+        .transform((value) => value
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean))
+        .pipe(z.array(z.string().min(1)).min(1)),
     DEPLOYMENT_ENVIRONMENT: z.string().min(1),
     DEPLOYMENT_REVISION: z.string().min(1),
     OPENAPI_ENABLED: booleanSchema,
@@ -115,6 +123,8 @@ const localDefaults = {
     TURN_CREDENTIAL_SECRET: "local-only-turn-secret-32-characters",
     STRIPE_SECRET_KEY: "sk_test_local_placeholder",
     STRIPE_WEBHOOK_SECRET: "whsec_local_placeholder",
+    TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
+    TURNSTILE_ALLOWED_HOSTNAMES: "localhost",
     DEPLOYMENT_ENVIRONMENT: "local",
     DEPLOYMENT_REVISION: "development",
     OPENAPI_ENABLED: "true",
@@ -158,6 +168,7 @@ export function parseServerConfig(environment) {
             "TURN_CREDENTIAL_SECRET",
             "STRIPE_SECRET_KEY",
             "STRIPE_WEBHOOK_SECRET",
+            "TURNSTILE_SECRET_KEY",
         ];
         const unsafe = sensitive.filter((key) => placeholders.some((token) => String(result.data[key]).includes(token)));
         if (unsafe.length)

@@ -950,36 +950,57 @@ For every manual step, the responsible agent must document the dashboard URL, ex
 
 Update this table after every completed task. Keep evidence concise and link repository files where useful.
 
-| Task                      | Status      | Owner/agent | Evidence                                                 | Blocker or exact next action                            |
-| ------------------------- | ----------- | ----------- | -------------------------------------------------------- | ------------------------------------------------------- |
-| 0. Live inventory         | complete    | Codex       | July 12 inventory below                                  | Re-audit affected boundaries at the start of each task  |
-| 1. Human owners           | blocked     | unassigned  | Required roles listed below                              | Humans assign accountable owners                        |
-| 2. Launch and policies    | in_progress | Codex       | Run 2 country controls and policy gates                  | Humans approve countries and final policy documents     |
-| 3. Environments           | in_progress | Codex       | Run 3 CI, validation, setup runbook                      | Humans create/configure production provider accounts    |
-| 4. 18+ onboarding         | complete    | Codex       | Run 2 onboarding, contact guards, tests                  | Exercise database integration when services are running |
-| 5. Matching preferences   | complete    | Codex       | Run 3 persistence, API, Redis, UI, tests                 | Exercise integration suite through CI or local services |
-| 6. Text cooldown          | complete    | Codex       | Realtime lease, contracts, API, UI, tests                | Exercise Redis integration when Docker is running       |
-| 7. Ratings                | in_progress | Codex       | Run 4 migration, API/realtime/UI, tests                  | Human copy approval and staging integration validation  |
-| 8. Safe-card reveal       | in_progress | Codex       | Run 4 scoped projection/revocation/UI                    | Human disclosure approval and staging validation        |
-| 9. Reconnect              | in_progress | Codex       | Run 4 entitlement/offer/atomic accept flow               | Human lifetime/copy approval and staging validation     |
-| 10. Media quality         | in_progress | Codex       | Run 5 server policy/adaptation/browser fallbacks         | H10 selects TURN and validates targets in staging       |
-| 11. Stripe billing        | in_progress | Codex       | Run 5 migration/webhooks/Checkout/Portal/reconciliation  | H11 approval, IDs, tax decisions, sandbox/live tests    |
-| 12. Entitlements          | in_progress | Codex       | Run 5 centralized grants/plan rights/audit/fair priority | H11 approves grace and staging revocation tests         |
-| 13. Premium UI            | not_started | unassigned  | Placeholder route exists                                 | Depends on catalog and entitlements                     |
-| 14. Moderation operations | blocked     | unassigned  | Existing reports/admin/sanctions                         | Manual taxonomy/staffing plus gap audit                 |
-| 15. Anti-bot/spam         | not_started | unassigned  | Existing basic rate limiting                             | Configure Turnstile and expand limits                   |
-| 16. NSFW signals          | blocked     | unassigned  | None                                                     | Manual model/privacy approval                           |
-| 17. Privacy operations    | not_started | unassigned  | Partial session/account foundations                      | Inventory gaps after Task 0                             |
-| 18. Observability/cost    | not_started | unassigned  | Health endpoints exist                                   | Choose providers and implement redaction/metrics        |
-| 19. Hardening             | not_started | unassigned  | Current quality foundation                               | Begins after feature-complete release candidate         |
-| 20. E2E/load              | not_started | unassigned  | Basic Playwright/integration config                      | Expand throughout Tasks 4-19                            |
-| 21. Deploy/rehearse       | not_started | unassigned  | Vercel/Render manifests exist                            | Requires staging providers and feature completion       |
+| Task                      | Status      | Owner/agent | Evidence                                                  | Blocker or exact next action                            |
+| ------------------------- | ----------- | ----------- | --------------------------------------------------------- | ------------------------------------------------------- |
+| 0. Live inventory         | complete    | Codex       | July 12 inventory below                                   | Re-audit affected boundaries at the start of each task  |
+| 1. Human owners           | blocked     | unassigned  | Required roles listed below                               | Humans assign accountable owners                        |
+| 2. Launch and policies    | in_progress | Codex       | Run 2 country controls and policy gates                   | Humans approve countries and final policy documents     |
+| 3. Environments           | in_progress | Codex       | Run 3 CI, validation, setup runbook                       | Humans create/configure production provider accounts    |
+| 4. 18+ onboarding         | complete    | Codex       | Run 2 onboarding, contact guards, tests                   | Exercise database integration when services are running |
+| 5. Matching preferences   | complete    | Codex       | Run 3 persistence, API, Redis, UI, tests                  | Exercise integration suite through CI or local services |
+| 6. Text cooldown          | complete    | Codex       | Realtime lease, contracts, API, UI, tests                 | Exercise Redis integration when Docker is running       |
+| 7. Ratings                | in_progress | Codex       | Run 4 migration, API/realtime/UI, tests                   | Human copy approval and staging integration validation  |
+| 8. Safe-card reveal       | in_progress | Codex       | Run 4 scoped projection/revocation/UI                     | Human disclosure approval and staging validation        |
+| 9. Reconnect              | in_progress | Codex       | Run 4 entitlement/offer/atomic accept flow                | Human lifetime/copy approval and staging validation     |
+| 10. Media quality         | in_progress | Codex       | Run 5 server policy/adaptation/browser fallbacks          | H10 selects TURN and validates targets in staging       |
+| 11. Stripe billing        | in_progress | Codex       | Run 5 migration/webhooks/Checkout/Portal/reconciliation   | H11 approval, IDs, tax decisions, sandbox/live tests    |
+| 12. Entitlements          | in_progress | Codex       | Run 5 centralized grants/plan rights/audit/fair priority  | H11 approves grace and staging revocation tests         |
+| 13. Premium UI            | in_progress | Codex       | Run 6 server catalog/status/comparison/Portal UX          | H11 catalog approval and real Stripe staging validation |
+| 14. Moderation operations | blocked     | Codex       | Run 6 SLA queue/evidence/templates/sanction operations    | H12 policy approval, MFA choice, staffing, training     |
+| 15. Anti-bot/spam         | in_progress | Codex       | Run 6 Turnstile validation/scoped limits/repeat detection | H13 widgets, thresholds, friction and staging approval  |
+| 16. NSFW signals          | blocked     | unassigned  | None                                                      | Manual model/privacy approval                           |
+| 17. Privacy operations    | not_started | unassigned  | Partial session/account foundations                       | Inventory gaps after Task 0                             |
+| 18. Observability/cost    | not_started | unassigned  | Health endpoints exist                                    | Choose providers and implement redaction/metrics        |
+| 19. Hardening             | not_started | unassigned  | Current quality foundation                                | Begins after feature-complete release candidate         |
+| 20. E2E/load              | not_started | unassigned  | Basic Playwright/integration config                       | Expand throughout Tasks 4-19                            |
+| 21. Deploy/rehearse       | not_started | unassigned  | Vercel/Render manifests exist                             | Requires staging providers and feature completion       |
 
 ### Current handoff
 
-Tasks 0, 4, 5, and 6 are complete. Tasks 2 and 3 have complete agent implementations but remain `in_progress` on human approvals and provider setup. Task 1 remains blocked on named owners. Tasks 7-9 have complete agent implementations and await H7-H9 plus staging integration. Tasks 10-12 now have complete agent implementations and remain `in_progress` only on H10/H11 provider approval, catalog configuration, and real-service staging validation. Paid plans remain disabled in the seeded catalog until that work is recorded. The exact next agent implementation task is Task 13, replacing the premium placeholder UI.
+Tasks 0, 4, 5, and 6 are complete. Tasks 2-3 and 7-13 have complete agent implementations but remain `in_progress` on their recorded human approvals/provider staging work. Task 14's agent work is complete but the task remains blocked on H12 policy approval and staffed moderation operations. Task 15's agent work is complete and remains `in_progress` on H13 Turnstile configuration, threshold approval, and real-service validation. Paid plans remain disabled in the seeded catalog, and the UI labels them unavailable, until H11 is recorded. Task 16 remains blocked on H14 model/privacy approval. The exact next unblocked agent implementation task is Task 17, privacy operations.
 
 ## 16. Progress updates
+
+### Run 6: premium UI, moderation operations, and anti-abuse controls
+
+Date: July 13, 2026
+Status: agent implementation complete; manual launch dependencies remain
+
+#### Tasks 13-15 implementation
+
+- Replaced the premium placeholder with a server-catalog-driven comparison page. It separates active V1 benefits from explicitly non-active V2 benefits; displays the current plan, provider status, renewal/cancellation date, processing state, Portal access, and honest unavailable states; and permits Checkout only when the server catalog marks a paid row purchasable.
+- Changed the public catalog projection to return all stable plan rows with a server-derived `purchasable` flag. Seeded paid rows remain inactive and cannot start Checkout before H11.
+- Ordered moderation work by urgent/high/standard priority and oldest-first within priority, added priority-specific escalation deadlines and overdue state, exposed provisional reason templates, included evidence expiry metadata, and enabled reason-gated sanction actions in the admin client. Existing AAL2, exact-origin, role, recent-reauthentication, minimum-evidence, append-only audit, and reviewer-separation controls remain enforced.
+- Added Cloudflare Turnstile configuration and a server Siteverify boundary that checks success, expected action, exact allowed hostname, provider failure, and privacy-preserving hashed network-prefix attempt limits. Signup and password recovery now pass Turnstile tokens through Supabase's supported captcha boundary.
+- Added account-and-route mutation limiting across guarded HTTP writes, dedicated queue/message/report limits, and normalized-content hashing to detect high-rate identical direct and random-chat messages without retaining message text in Redis keys. Existing queue churn limiting remains separate from the text Next cooldown.
+
+Files changed: `apps/web/src/app.tsx`, `apps/web/src/pages.tsx`, `apps/web/src/app.test.tsx`, `apps/admin/src/pages.tsx`, `apps/admin/src/app.test.tsx`, `apps/api/src/app.ts`, `apps/api/src/realtime.ts`, `apps/api/src/abuse-service.ts`, `apps/api/src/abuse-service.test.ts`, `packages/database/src/entitlements.ts`, `packages/database/src/moderation.ts`, `packages/config/src/index.ts`, `.env.example`, and this plan.
+
+Verification: `npm run check` passed on July 13, 2026: formatting, lint, workspace type checking, 65 current and legacy unit/UI/API tests, 10 migration validations, and the secret scan passed. Redis was not running, so API readiness correctly returned degraded status; real PostgreSQL/Redis, Stripe, Turnstile, and browser staging validation remains in H11-H13.
+
+Remaining risks: Redis and PostgreSQL integration services were unavailable during the focused unit run; Turnstile and Stripe require real staging credentials and dashboards; moderation thresholds, taxonomy, sanction matrix, escalation targets, retention, and staffing are provisional until H11-H13 are approved. Generic guarded-write limits are conservative defaults and must be tuned from staging/load evidence without weakening safety exits.
+
+Exact next agent task: Task 17, complete privacy operations. Task 16 must not start until H14 approves the model, license, privacy design, user notice, and enabled countries.
 
 ### Run 1: live inventory, ownership gate, and text cooldown
 
@@ -1494,6 +1515,9 @@ Status: `not_started`
 8. Enroll every admin in MFA and test joiner/mover/leaver access removal.
 9. Run a tabletop moderation exercise and record results.
 10. Do not enable public matching above staffed moderation capacity.
+11. Review Run 6's provisional escalation targets: urgent 15 minutes, high 60 minutes, and standard 24 hours; replace them where the approved policy differs.
+12. In staging, verify urgent/high/standard ordering, oldest-first handling, overdue display, purpose-bound evidence reveal, evidence expiry display, assignment, every sanction type, recent-reauthentication rejection, audit creation, and appeal reviewer separation.
+13. Approve or replace the provisional reason templates returned by `/v1/admin/moderation/templates`; ensure illegal-content and underage procedures point to private runbooks rather than sensitive instructions in the client.
 
 Completion evidence: unassigned
 
@@ -1509,6 +1533,11 @@ Status: `not_started`
 5. Approve rate-limit thresholds and user-facing retry copy.
 6. Test success, failure, expiry, replay, provider outage, and accessibility.
 7. Review false-positive and appeal paths with safety/support.
+8. Configure `VITE_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, and the exact comma-separated `TURNSTILE_ALLOWED_HOSTNAMES` independently in staging and production; never expose the secret key to Vite.
+9. Confirm Supabase Auth CAPTCHA protection is enabled for signup and password recovery and uses the matching environment widget.
+10. Validate expected action and hostname rejection, five-minute expiry, single-use replay rejection, provider outage, IPv4/IPv6 prefix behavior, keyboard/screen-reader operation, and an account moving between networks.
+11. Review Run 6's provisional limits: 30 guarded writes per account/path/minute, 20 guarded writes per session/path/minute, 20 queue joins/minute, 60 direct messages/minute, four identical messages/minute, 10 reports/hour, and 20 challenge attempts/network prefix/five minutes. Approve replacements based on staging abuse/load evidence.
+12. Confirm Block, Leave, Report, and Report and leave remain usable under unrelated message/queue friction; define the support path when a report-specific limit is reached.
 
 Completion evidence: unassigned
 

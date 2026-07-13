@@ -18,10 +18,10 @@ import {
   OtherProfilePage,
   LandingPage,
   OnboardingPage,
-  PlaceholderPage,
   ProfilePage,
   SettingsPage,
   MessagesPage,
+  PremiumPage,
 } from "./pages.js";
 
 export const webRoutes: RouteObject[] = [
@@ -64,13 +64,7 @@ export const webRoutes: RouteObject[] = [
       },
       {
         path: "premium",
-        element: (
-          <PlaceholderPage
-            description="Premium remains disabled until server-backed Stripe entitlements exist."
-            eyebrow="MORE CHOICE"
-            title="Premium"
-          />
-        ),
+        element: <PremiumPage />,
       },
       {
         path: "settings",

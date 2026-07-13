@@ -69,6 +69,7 @@ import {
 } from "./auth.js";
 import { AvatarService, SupabaseStorage } from "./avatar-service.js";
 import { BillingService } from "./billing-service.js";
+import { AbuseProtection } from "./abuse-service.js";
 import {
   RedisRealtimeStore,
   textSkipCooldown,
@@ -105,6 +106,7 @@ export interface CreateAppOptions {
   engagement?: EngagementRepository;
   entitlements?: EntitlementService;
   billing?: BillingService;
+  abuse?: AbuseProtection;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -178,6 +180,12 @@ export function createApp(options: CreateAppOptions = {}) {
       config.STRIPE_SECRET_KEY,
       config.STRIPE_WEBHOOK_SECRET,
       config.WEB_ALLOWED_ORIGINS[0]!,
+    );
+  const abuse =
+    options.abuse ??
+    new AbuseProtection(
+      config.TURNSTILE_SECRET_KEY,
+      config.TURNSTILE_ALLOWED_HOSTNAMES,
     );
   const countryFromRequest = (request: FastifyRequest) => {
     const value = request.headers[config.COUNTRY_HEADER_NAME];
@@ -321,6 +329,37 @@ export function createApp(options: CreateAppOptions = {}) {
               ),
             );
       }
+      if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+        const category = request.url
+          .split("?")[0]!
+          .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ":id");
+        const [accountLimit, sessionLimit] = await Promise.all([
+          realtime.rateLimit(
+            `http:account:${auth.user.id}:${category}`,
+            30,
+            60,
+          ),
+          realtime.rateLimit(
+            `http:session:${auth.identity.authSessionId}:${category}`,
+            20,
+            60,
+          ),
+        ]);
+        if (!accountLimit.allowed || !sessionLimit.allowed)
+          return reply.code(429).send(
+            error(
+              "rate_limited",
+              "Too many requests; retry later",
+              request.id,
+              {
+                retryAfterMs: Math.max(
+                  accountLimit.retryAfterMs,
+                  sessionLimit.retryAfterMs,
+                ),
+              },
+            ),
+          );
+      }
     };
   const launchGuard =
     (capability: "registration" | "matching" | "billing") =>
@@ -416,6 +455,41 @@ export function createApp(options: CreateAppOptions = {}) {
     privacyVersion: config.CURRENT_PRIVACY_VERSION,
     guidelinesVersion: config.CURRENT_GUIDELINES_VERSION,
   }));
+  app.post("/v1/abuse/turnstile", async (request, reply) => {
+    const parsed = z
+      .object({
+        token: z.string().min(1).max(4096),
+        action: z.enum(["signup", "recovery", "risk_check"]),
+      })
+      .safeParse(request.body);
+    if (!parsed.success)
+      return reply
+        .code(400)
+        .send(error("bad_request", "Challenge token required", request.id));
+    const prefix = abuse.networkPrefix(request.ip);
+    const limit = await realtime.rateLimit(
+      `challenge:network:${prefix}`,
+      20,
+      300,
+    );
+    if (!limit.allowed)
+      return reply
+        .code(429)
+        .send(error("rate_limited", "Too many challenge attempts", request.id));
+    try {
+      await abuse.verify(parsed.data.token, parsed.data.action, request.ip);
+      return { verified: true };
+    } catch (cause) {
+      return reply
+        .code(
+          cause instanceof Error &&
+            cause.message === "challenge_provider_unavailable"
+            ? 503
+            : 403,
+        )
+        .send(error("forbidden", "Challenge verification failed", request.id));
+    }
+  });
   app.get("/v1/catalog/plans", async () => ({
     items: (await entitlements.catalog()).map((plan) => ({
       key: plan.key,
@@ -423,6 +497,7 @@ export function createApp(options: CreateAppOptions = {}) {
       monthlyPriceCents: plan.monthlyPriceCents,
       currency: plan.currency,
       version: plan.version,
+      purchasable: plan.active && Boolean(plan.stripePriceId),
     })),
   }));
   app.get("/v1/me/entitlements", { preHandler: guard("inspect_self") }, (req) =>
@@ -1150,6 +1225,16 @@ export function createApp(options: CreateAppOptions = {}) {
           "Message rate limit reached",
           429,
         );
+      const repeated = await realtime.repeatedContent(
+        `direct-message:${req.auth!.user.id}`,
+        input.body,
+      );
+      if (!repeated.allowed)
+        throw new DomainError(
+          "rate_limited",
+          "Repeated-message limit reached; vary your message or retry later",
+          429,
+        );
       try {
         const message = await communications.send(
           req.auth!.user.id,
@@ -1324,6 +1409,17 @@ export function createApp(options: CreateAppOptions = {}) {
     "/v1/reports",
     { preHandler: authenticate },
     route(reportCreateSchema, async (req, input) => {
+      const limit = await realtime.rateLimit(
+        `report:user:${req.auth!.user.id}`,
+        10,
+        60 * 60,
+      );
+      if (!limit.allowed)
+        throw new DomainError(
+          "rate_limited",
+          "Report limit reached; urgent help remains available through support",
+          429,
+        );
       const report = await moderation.createReport(req.auth!.user.id, input);
       if (input.leaveAfterSubmit) {
         if (input.encounterId)
@@ -1371,6 +1467,25 @@ export function createApp(options: CreateAppOptions = {}) {
         priority: query.priority,
       });
     },
+  );
+  app.get(
+    "/v1/admin/moderation/templates",
+    { preHandler: adminGuard("support") },
+    () => ({
+      provisional: true,
+      reasons: {
+        sexual_content:
+          "Review for prohibited sexual content; escalate suspected exploitation immediately.",
+        harassment: "Assess targeted abuse, repetition, and threats.",
+        hate_or_threats: "Prioritize threats and protected-class targeting.",
+        minor_safety:
+          "Urgent: preserve minimum evidence and follow the underage escalation runbook.",
+        spam_or_scam:
+          "Check repeated contact, identical messages, links, and financial solicitation.",
+        self_harm: "Urgent: follow the approved crisis escalation runbook.",
+        other: "Document the policy section and minimum necessary evidence.",
+      },
+    }),
   );
   app.get(
     "/v1/admin/launch-countries",
@@ -2072,6 +2187,11 @@ async function handleRealtime(
     return ended;
   }
   if (event.type === "chat.send") {
+    const repeated = await realtime.repeatedContent(
+      `random-chat:${identity.userId}`,
+      event.payload.text,
+    );
+    if (!repeated.allowed) throw new Error("repeated_message_rate_limited");
     if (await moderation.restriction(identity.userId, "matching"))
       throw new Error("capability_revoked");
     const sequence = await realtime.nextSequence(match.id);
