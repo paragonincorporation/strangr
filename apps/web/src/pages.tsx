@@ -72,7 +72,7 @@ export function LandingPage() {
                 Beta is not open in {availability.countryCode} yet
               </span>
             ) : (
-              <Link className="hero-primary" to="/auth/sign-in">
+              <Link className="hero-primary" to="/auth/sign-up">
                 Create your account <b>↗</b>
               </Link>
             )}
@@ -310,58 +310,23 @@ export function PremiumPage() {
   );
 }
 
-function TurnstileChallenge({
-  action,
-  onToken,
-}: {
-  action: "signup" | "recovery";
-  onToken: (token: string) => void;
-}) {
-  const container = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const sitekey = String(import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "");
-    if (!sitekey || !container.current) return;
-    const win = window as typeof window & {
-      turnstile?: {
-        render: (
-          element: HTMLElement,
-          options: Record<string, unknown>,
-        ) => string;
-      };
-    };
-    const render = () => {
-      if (container.current && win.turnstile)
-        win.turnstile.render(container.current, {
-          sitekey,
-          action,
-          callback: onToken,
-          "expired-callback": () => onToken(""),
-        });
-    };
-    if (win.turnstile) render();
-    else {
-      const script = document.createElement("script");
-      script.src =
-        "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-      script.async = true;
-      script.onload = render;
-      document.head.append(script);
-    }
-  }, [action, onToken]);
-  return <div aria-label="Anti-abuse challenge" ref={container} />;
-}
+type AuthMode = "sign_in" | "sign_up" | "reset";
 
-export function AuthPage() {
-  const [mode, setMode] = useState<"sign_in" | "sign_up" | "reset">("sign_in");
+export function AuthPage({ initialMode = "sign_in" }: { initialMode?: AuthMode }) {
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [captchaToken, setCaptchaToken] = useState("");
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (mode === "sign_up" && password !== passwordConfirmation) {
+      setMessage("Passwords do not match.");
+      return;
+    }
     if (!supabase) {
       setMessage("Authentication is not configured for this environment.");
       return;
@@ -370,21 +335,17 @@ export function AuthPage() {
     setMessage("");
     try {
       if (mode === "reset") {
-        if (!captchaToken) throw new Error("Complete the anti-abuse challenge");
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `${location.origin}/auth/sign-in`,
-          captchaToken,
         });
         if (error) throw error;
         setMessage("Check your email for a password reset link.");
       } else if (mode === "sign_up") {
-        if (!captchaToken) throw new Error("Complete the anti-abuse challenge");
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: `${location.origin}/auth/sign-in`,
-            captchaToken,
           },
         });
         if (error) throw error;
@@ -446,10 +407,16 @@ export function AuthPage() {
               value={password}
             />
           ) : null}
-          {mode !== "sign_in" ? (
-            <TurnstileChallenge
-              action={mode === "reset" ? "recovery" : "signup"}
-              onToken={setCaptchaToken}
+          {mode === "sign_up" ? (
+            <Input
+              autoComplete="new-password"
+              label="Confirm password"
+              placeholder="Re-enter your password"
+              type="password"
+              minLength={10}
+              onChange={(e) => setPasswordConfirmation(e.target.value)}
+              required
+              value={passwordConfirmation}
             />
           ) : null}
           <Button disabled={busy} fullWidth type="submit">
@@ -464,12 +431,21 @@ export function AuthPage() {
         </form>
         {message ? <p role="status">{message}</p> : null}
         <Button
-          onClick={() => setMode(mode === "sign_in" ? "sign_up" : "sign_in")}
+          onClick={() => {
+            setMessage("");
+            setMode(mode === "sign_in" ? "sign_up" : "sign_in");
+          }}
           variant="quiet"
         >
           {mode === "sign_in" ? "Create an account" : "Back to sign in"}
         </Button>
-        <Button onClick={() => setMode("reset")} variant="quiet">
+        <Button
+          onClick={() => {
+            setMessage("");
+            setMode("reset");
+          }}
+          variant="quiet"
+        >
           Forgot password?
         </Button>
         <div className="auth-divider">

@@ -14,9 +14,7 @@ describe("web application shell", () => {
     await user.click(
       screen.getByRole("link", { name: "Create your account ↗" }),
     );
-    expect(
-      await screen.findByRole("heading", { name: "Come meet someone new." }),
-    ).toBeVisible();
+    expect(await screen.findByLabelText("Confirm password")).toBeVisible();
   });
 
   test("renders authenticated desktop and mobile navigation boundaries", () => {

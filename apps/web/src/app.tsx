@@ -32,6 +32,7 @@ export const webRoutes: RouteObject[] = [
     children: [
       { index: true, element: <LandingPage /> },
       { path: "auth/sign-in", element: <AuthPage /> },
+      { path: "auth/sign-up", element: <AuthPage initialMode="sign_up" /> },
       { path: "onboarding", element: <OnboardingPage /> },
     ],
   },
