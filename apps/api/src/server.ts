@@ -2,14 +2,20 @@ import { parseServerConfig } from "@paramingle/config";
 import { createApp } from "./app.js";
 
 let config;
+
 try {
   config = parseServerConfig(process.env);
 } catch (error) {
-  console.error(
-    error instanceof Error ? error.message : "Invalid server configuration",
-  );
+  console.error("Configuration error:");
+  console.error(error);
+
+  if (error instanceof Error) {
+    console.error(error.stack);
+  }
+
   process.exit(1);
 }
+
 const app = createApp({ config });
 const { API_PORT: port, API_HOST: host } = config;
 
@@ -24,6 +30,7 @@ process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
 try {
   await app.listen({ port, host });
+
   app.log.info(
     {
       webSocket: `ws://localhost:${port}/ws`,
@@ -32,6 +39,14 @@ try {
     "Paramingle API foundation ready",
   );
 } catch (error) {
+  console.error("Failed to start server:");
+  console.error(error);
+
+  if (error instanceof Error) {
+    console.error(error.stack);
+  }
+
   app.log.error(error);
+
   process.exit(1);
 }
