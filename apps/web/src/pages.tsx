@@ -1772,10 +1772,11 @@ export function ConversationPage() {
   const [searchParams] = useSearchParams();
   const permissionDenied = searchParams.get("permission") === "denied";
   const call = useCallUi();
-  const mode =
-    permissionDenied || routeMode === "text" || call.mode === "text"
-      ? "text"
-      : "video";
+  // The route is the user's explicit choice. Do not inherit a text fallback
+  // from a previous conversation when they start a new video match.
+  const [mode, setMode] = useState<"text" | "video">(
+    permissionDenied || routeMode === "text" ? "text" : "video",
+  );
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState("harassment");
   const [reportNote, setReportNote] = useState("");
@@ -1907,25 +1908,42 @@ export function ConversationPage() {
     );
     realtime.current = client;
     const start = async () => {
+      let matchingMode = mode;
       if (mode === "video")
         try {
-          const policy = await api<MediaQualityPolicy>("/v1/me/media-policy");
-          const stream = await media.current.acquire(policy);
+          // Ask for device access before any optional API work. Previously, a
+          // failed media-policy request was caught here and presented as a
+          // camera/microphone failure without ever triggering the browser
+          // permission prompt.
+          const stream = await media.current.acquire();
           if (localVideo.current) localVideo.current.srcObject = stream;
         } catch {
           if (active) {
             setPermissionError(true);
+            setMode("text");
             call.setMode("text");
           }
+          matchingMode = "text";
         }
       await client.connect();
       const preference = await api<{ allowPreferenceRelaxation: boolean }>(
         "/v1/me/matching-preferences",
       );
       client.send("match.join", {
-        mode: permissionError ? "text" : mode,
+        mode: matchingMode,
         allowPreferenceRelaxation: preference.allowPreferenceRelaxation,
       });
+      // Quality selection is useful, but it must never decide whether the
+      // user gets a chance to grant camera and microphone access.
+      if (matchingMode === "video")
+        void api<MediaQualityPolicy>("/v1/me/media-policy")
+          .then((policy) => {
+            if (!active) return;
+            media.current.policy = policy;
+            if (peer.current)
+              void media.current.applyPolicy(peer.current, policy);
+          })
+          .catch(() => undefined);
     };
     void start().catch((error) => {
       if (error instanceof ApiError && error.code === "capacity_full")
@@ -2169,7 +2187,13 @@ export function ConversationPage() {
             <strong>Camera or microphone unavailable.</strong>
             <p>You can continue in text mode without granting media access.</p>
           </div>
-          <Button onClick={() => call.setMode("text")} size="small">
+          <Button
+            onClick={() => {
+              setMode("text");
+              call.setMode("text");
+            }}
+            size="small"
+          >
             Use text instead
           </Button>
         </Card>
