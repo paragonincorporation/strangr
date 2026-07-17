@@ -12,9 +12,12 @@ export class RealtimeClient {
   private reconnectTimer: number | null = null;
   constructor(
     private onEvent: (event: unknown) => void,
-    private onStatus: (status: "connected" | "reconnecting" | "ended") => void,
+    private onStatus: (
+      status: "connecting" | "connected" | "reconnecting" | "ended",
+    ) => void,
   ) {}
   async connect() {
+    this.onStatus(this.attempts === 0 ? "connecting" : "reconnecting");
     const { ticket } = await api<{ ticket: string }>("/v1/realtime/tickets", {
       method: "POST",
     });
@@ -23,18 +26,34 @@ export class RealtimeClient {
     apiUrl.protocol = apiUrl.protocol === "https:" ? "wss:" : "ws:";
     apiUrl.pathname = "/ws";
     apiUrl.search = `ticket=${encodeURIComponent(ticket)}`;
-    this.socket = new WebSocket(apiUrl);
-    this.socket.onopen = () => {
-      this.attempts = 0;
-      this.onStatus("connected");
-    };
-    this.socket.onmessage = (message) => {
-      const parsed = serverRealtimeEnvelopeSchema.safeParse(
-        JSON.parse(String(message.data)),
-      );
-      if (parsed.success) this.onEvent(parsed.data);
-    };
-    this.socket.onclose = () => this.reconnect();
+    const socket = new WebSocket(apiUrl);
+    this.socket = socket;
+    await new Promise<void>((resolve, reject) => {
+      let opened = false;
+      socket.onopen = () => {
+        opened = true;
+        this.attempts = 0;
+        this.onStatus("connected");
+        resolve();
+      };
+      socket.onmessage = (message) => {
+        try {
+          const parsed = serverRealtimeEnvelopeSchema.safeParse(
+            JSON.parse(String(message.data)),
+          );
+          if (parsed.success) this.onEvent(parsed.data);
+        } catch {
+          // Invalid server messages are ignored; the socket remains usable.
+        }
+      };
+      socket.onerror = () => {
+        if (!opened) reject(new Error("Realtime connection failed"));
+      };
+      socket.onclose = () => {
+        if (!opened) reject(new Error("Realtime connection closed"));
+        else this.reconnect();
+      };
+    });
   }
   send(
     type: ClientRealtimeEnvelope["type"],
@@ -59,6 +78,7 @@ export class RealtimeClient {
   }
   private reconnect() {
     if (this.stopped) return;
+    this.socket = null;
     if (this.attempts >= 5) {
       this.onStatus("ended");
       return;

@@ -130,6 +130,7 @@ const commonServerSchema = z.object({
         .string()
         .regex(/^[a-z0-9-]+$/)
         .default("cf-ipcountry"),
+    EDGE_PROXY_SECRET: z.string().min(32),
     LOCAL_COUNTRY_CODE: z
         .string()
         .regex(/^[A-Z]{2}$/)
@@ -164,6 +165,7 @@ const localDefaults = {
     GLOBAL_CONCURRENCY_CEILING: "1000",
     COUNTRY_CONCURRENCY_CEILINGS: "BD:1000",
     COUNTRY_HEADER_NAME: "x-paramingle-country",
+    EDGE_PROXY_SECRET: "local-only-edge-proxy-secret-32-characters",
     LOCAL_COUNTRY_CODE: "BD",
     WEB_ALLOWED_ORIGINS: "http://localhost:5173",
     ADMIN_ALLOWED_ORIGINS: "http://localhost:5174",
@@ -204,6 +206,7 @@ export function parseServerConfig(environment) {
             "SUPABASE_SERVICE_ROLE_KEY",
             "BIRTH_DATE_ENCRYPTION_KEY",
             "TURN_CREDENTIAL_SECRET",
+            "EDGE_PROXY_SECRET",
             "STRIPE_SECRET_KEY",
             "STRIPE_WEBHOOK_SECRET",
             "TURNSTILE_SECRET_KEY",

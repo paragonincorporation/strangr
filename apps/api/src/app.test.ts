@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { parseServerConfig } from "@paramingle/config";
-import { createApp } from "./app.js";
+import { countryCodeFromHeaders, createApp } from "./app.js";
 
 const apps: ReturnType<typeof createApp>[] = [];
 
@@ -99,5 +99,33 @@ describe("API foundation", () => {
     expect(response.headers["strict-transport-security"]).toBe(
       "max-age=31536000; includeSubDomains",
     );
+  });
+
+  test("trusts production country data only from the configured edge", () => {
+    const config = {
+      ...parseServerConfig({ NODE_ENV: "test" }),
+      NODE_ENV: "production" as const,
+      COUNTRY_HEADER_NAME: "cf-ipcountry",
+      EDGE_PROXY_SECRET: "production-edge-secret-that-is-long-enough",
+    };
+    expect(countryCodeFromHeaders({ "cf-ipcountry": "BD" }, config)).toBe("ZZ");
+    expect(
+      countryCodeFromHeaders(
+        {
+          "cf-ipcountry": "BD",
+          "x-paramingle-edge-secret": config.EDGE_PROXY_SECRET,
+        },
+        config,
+      ),
+    ).toBe("BD");
+    expect(
+      countryCodeFromHeaders(
+        {
+          "cf-ipcountry": "US",
+          "x-paramingle-edge-secret": "browser-forged-secret-that-is-invalid",
+        },
+        config,
+      ),
+    ).toBe("ZZ");
   });
 });

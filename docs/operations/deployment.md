@@ -18,7 +18,7 @@ Vercel never runs the Fastify process or worker. Video and audio never traverse 
 
 Import the repository twice. Set Root Directory to `apps/web` for the public project and `apps/admin` for the admin project. Keep access to files outside the Root Directory enabled so npm workspaces and the root lockfile are available. Both application-local `vercel.json` files select Vite, run the workspace-aware build, publish `dist`, set baseline browser headers, and provide the React Router fallback.
 
-Use Node 22. Configure the web project with `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_DEPLOYMENT_ENVIRONMENT`. Configure Preview and Production independently. Never place service-role, database, Redis, encryption, TURN-secret, or Stripe-secret values in a `VITE_*` variable.
+Use Node 22. Configure the web project with `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_DEPLOYMENT_ENVIRONMENT`. `VITE_API_URL` is Vite's name for a public browser build variable; it is not a temporary Vite development-server URL. In production it must be the permanent Cloudflare-proxied API origin, such as `https://api.paramingle.com`. The client derives `wss://api.paramingle.com/ws` from the same value. Configure Preview and Production independently. Never place service-role, database, Redis, encryption, TURN-secret, edge-secret, or Stripe-secret values in a `VITE_*` variable.
 
 ## Render Blueprint
 
@@ -38,7 +38,27 @@ Do not use an unrestricted `*.vercel.app` wildcard. HTTP CORS and WebSocket upgr
 
 ## Country eligibility header
 
-The API resolves production launch eligibility from `COUNTRY_HEADER_NAME`, which defaults to `cf-ipcountry`. The public API hostname must be proxied through the configured trusted edge, and the Render origin hostname must not be exposed as a supported client endpoint. The edge must overwrite the country header; it must never forward a client-supplied value.
+Render does not add a trustworthy visitor-country header. Deploying only Vercel plus Render therefore leaves production requests with country `ZZ`, and registration, matching, and billing remain denied.
+
+The production request path is:
+
+```text
+Browser -> https://api.<domain> on Cloudflare -> Render API
+        -> wss://api.<domain>/ws on Cloudflare -> Render /ws
+```
+
+The API resolves production launch eligibility from `COUNTRY_HEADER_NAME`, set to `cf-ipcountry` in `render.yaml`. The Cloudflare Worker in `deploy/cloudflare/api-proxy` replaces any incoming `cf-ipcountry` value with Cloudflare's own country result and adds a shared `x-paramingle-edge-secret`. The API accepts the country only when that secret matches `EDGE_PROXY_SECRET`; direct Render requests and browser-forged headers resolve to `ZZ`.
+
+Set up the permanent API origin as follows:
+
+1. Deploy the Render Blueprint and note the API service URL, for example `https://paramingle-api.onrender.com`.
+2. Set `ORIGIN_URL` in `deploy/cloudflare/api-proxy/wrangler.toml` to that Render origin.
+3. Generate one random value of at least 32 characters. Set the same value as Render's `EDGE_PROXY_SECRET` for the API and maintenance services.
+4. Store it in Cloudflare with `npx wrangler secret put EDGE_PROXY_SECRET --config deploy/cloudflare/api-proxy/wrangler.toml`.
+5. Deploy with `npx wrangler deploy --config deploy/cloudflare/api-proxy/wrangler.toml`.
+6. Attach the permanent custom domain `api.<domain>` to the Worker in Cloudflare. Do not point the browser at the Worker development URL or the Render hostname.
+7. Set Vercel Production `VITE_API_URL=https://api.<domain>` with no trailing path. Set Preview to the equivalent staging API domain, never the production API.
+8. Put the exact Vercel web and admin origins in Render's `WEB_ALLOWED_ORIGINS`, `ADMIN_ALLOWED_ORIGINS`, and approved `PREVIEW_ALLOWED_ORIGINS`.
 
 Local development uses `x-paramingle-country` and falls back to `LOCAL_COUNTRY_CODE`. Neither local behavior nor a browser-provided country is a production trust signal. A missing or malformed production header resolves to `ZZ` and is denied by default.
 
@@ -66,6 +86,7 @@ Operational failure exercises, evidence records, rollback boundaries, and kill s
 - Confirm generated browser bundles contain no server secret name or value.
 - Confirm an approved origin receives CORS headers and an unrelated origin does not.
 - Confirm an unapproved WebSocket Origin receives HTTP 403 before ticket consumption.
+- Confirm the public API reports the expected country and a direct Render request reports `ZZ`.
 - Confirm `https://` API configuration becomes `wss://.../ws` in the client.
 - Confirm `worker:once` exits and closes its database pool.
 - Confirm an established WebRTC call is not limited by Vercel Function duration.

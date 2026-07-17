@@ -72,6 +72,10 @@ services:
         sync: false
       - key: COUNTRY_CONCURRENCY_CEILINGS
         sync: false
+      - key: COUNTRY_HEADER_NAME
+        value: cf-ipcountry
+      - key: EDGE_PROXY_SECRET
+        sync: false
 
   - type: cron
     name: paramingle-maintenance
@@ -141,6 +145,10 @@ services:
       - key: GLOBAL_CONCURRENCY_CEILING
         sync: false
       - key: COUNTRY_CONCURRENCY_CEILINGS
+        sync: false
+      - key: COUNTRY_HEADER_NAME
+        value: cf-ipcountry
+      - key: EDGE_PROXY_SECRET
         sync: false
 
   - type: keyvalue

@@ -90,6 +90,6 @@ Readiness checks the attached Postgres boundary and live Redis connection. Datab
 
 ## Deployment
 
-The user and admin Vite applications deploy as separate Vercel projects. Fastify HTTP/WebSocket traffic, scheduled maintenance, and Redis-compatible realtime state deploy through the root Render Blueprint in `render.yaml`. Supabase remains the Auth/Postgres/Storage provider; WebRTC media is peer-to-peer or TURN-relayed and does not pass through Vercel or the API.
+The user and admin Vite applications deploy as separate Vercel projects. The permanent public API domain is served through the Cloudflare Worker in `deploy/cloudflare/api-proxy`, which proxies HTTP and WebSocket traffic to the Fastify service deployed by the root Render Blueprint in `render.yaml`. Render also hosts scheduled maintenance and Redis-compatible realtime state. Supabase remains the Auth/Postgres/Storage provider; WebRTC media is peer-to-peer or TURN-relayed and does not pass through Vercel or the API.
 
 See [the deployment runbook](docs/operations/deployment.md) for project settings, environment ownership, deployment order, and smoke checks.

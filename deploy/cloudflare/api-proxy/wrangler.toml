@@ -1,0 +1,10 @@
+name = "paramingle-api-proxy"
+main = "src/index.js"
+compatibility_date = "2026-07-17"
+
+[vars]
+# Replace this with the Render service hostname, without a path.
+ORIGIN_URL = "https://paramingle-api.onrender.com"
+
+# Add the permanent api.example.com custom domain in the Cloudflare dashboard.
+# Store EDGE_PROXY_SECRET with: npx wrangler secret put EDGE_PROXY_SECRET

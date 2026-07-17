@@ -532,6 +532,9 @@
   border-radius: 50%;
   background: var(--color-warning);
 }
+.connection-status--connected i {
+  background: var(--color-success);
+}
 .permission-banner {
   position: fixed;
   z-index: 25;

@@ -7,6 +7,7 @@ describe("validated configuration", () => {
         GLOBAL_CONCURRENCY_CEILING: 1000,
         COUNTRY_CONCURRENCY_CEILINGS: { BD: 1000 },
         COUNTRY_HEADER_NAME: "x-paramingle-country",
+        EDGE_PROXY_SECRET: "local-only-edge-proxy-secret-32-characters",
         LOCAL_COUNTRY_CODE: "BD",
     }));
     test("uses the Render commit and parses reviewed country ceilings", () => {

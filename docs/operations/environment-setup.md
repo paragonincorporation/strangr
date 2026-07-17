@@ -12,7 +12,8 @@ For staging and production, create separate Supabase projects, Stripe modes/conf
 
 - Vercel web: `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_DEPLOYMENT_ENVIRONMENT` only.
 - Vercel admin: `VITE_API_URL` and `VITE_DEPLOYMENT_ENVIRONMENT`; admin auth configuration must remain public-client data only.
-- Render API/worker: every server variable in `.env.example`, using provider secret storage.
+- Render API/worker: every server variable in `.env.example`, using provider secret storage. `EDGE_PROXY_SECRET` must match the Cloudflare Worker secret and must never be a `VITE_*` variable.
+- Cloudflare Worker: `ORIGIN_URL` is the non-secret Render origin; `EDGE_PROXY_SECRET` is stored with Wrangler or the Cloudflare dashboard.
 - GitHub Actions: integration credentials are ephemeral service-container values. Production secrets do not belong in CI.
 
 After entry, rotate one credential at a time and run readiness/smoke checks. Revoke departed operators immediately. Review access quarterly.

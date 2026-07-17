@@ -50,6 +50,7 @@ declare const commonServerSchema: z.ZodObject<{
     GLOBAL_CONCURRENCY_CEILING: z.ZodCoercedNumber<unknown>;
     COUNTRY_CONCURRENCY_CEILINGS: z.ZodPipe<z.ZodString, z.ZodTransform<Record<string, number>, string>>;
     COUNTRY_HEADER_NAME: z.ZodDefault<z.ZodString>;
+    EDGE_PROXY_SECRET: z.ZodString;
     LOCAL_COUNTRY_CODE: z.ZodDefault<z.ZodString>;
 }, z.core.$strip>;
 export type ServerConfig = z.infer<typeof commonServerSchema>;

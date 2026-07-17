@@ -312,7 +312,11 @@ export function PremiumPage() {
 
 type AuthMode = "sign_in" | "sign_up" | "reset";
 
-export function AuthPage({ initialMode = "sign_in" }: { initialMode?: AuthMode }) {
+export function AuthPage({
+  initialMode = "sign_in",
+}: {
+  initialMode?: AuthMode;
+}) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -1803,6 +1807,9 @@ export function ConversationPage() {
   const [draft, setDraft] = useState("");
   const [permissionError, setPermissionError] = useState(permissionDenied);
   const [betaFull, setBetaFull] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState<
+    "connecting" | "connected" | "reconnecting" | "ended"
+  >("connecting");
   const [skipAllowedAt, setSkipAllowedAt] = useState<number | null>(null);
   const [clock, setClock] = useState(() => Date.now());
   const localVideo = useRef<HTMLVideoElement>(null);
@@ -1904,7 +1911,10 @@ export function ConversationPage() {
         )
           void receiveRtc(event);
       },
-      (status) => call.setStatus(status),
+      (status) => {
+        setRealtimeStatus(status);
+        if (status !== "connecting") call.setStatus(status);
+      },
     );
     realtime.current = client;
     const start = async () => {
@@ -1946,6 +1956,8 @@ export function ConversationPage() {
           .catch(() => undefined);
     };
     void start().catch((error) => {
+      setRealtimeStatus("ended");
+      call.setStatus("ended");
       if (error instanceof ApiError && error.code === "capacity_full")
         setBetaFull(true);
       setToast(
@@ -2089,6 +2101,12 @@ export function ConversationPage() {
     clock >= ratingEligibleAt &&
     !ratingSubmitted,
   );
+  const realtimeStatusLabel = {
+    connecting: "Connecting",
+    connected: matchId ? "Matched" : "Waiting for match",
+    reconnecting: "Reconnecting",
+    ended: "Connection unavailable",
+  }[realtimeStatus];
 
   const submitRating = async (outcome: "like" | "dislike") => {
     const encounterId = matchId ?? endedEncounterId;
@@ -2176,9 +2194,11 @@ export function ConversationPage() {
           PARAMINGLE<i>.</i>
         </Link>
         <Badge tone="warning">INTERFACE PREVIEW</Badge>
-        <span className="connection-status">
+        <span
+          className={`connection-status connection-status--${realtimeStatus}`}
+        >
           <i />
-          {call.status === "reconnecting" ? "Reconnecting" : "Not connected"}
+          {realtimeStatusLabel}
         </span>
       </header>
       {permissionError ? (

@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
@@ -114,6 +114,36 @@ export interface CreateAppOptions {
   privacy?: PrivacyService;
 }
 
+const EDGE_SECRET_HEADER = "x-paramingle-edge-secret";
+
+export function countryCodeFromHeaders(
+  headers: Record<string, string | string[] | undefined>,
+  config: Pick<
+    ServerConfig,
+    | "NODE_ENV"
+    | "COUNTRY_HEADER_NAME"
+    | "EDGE_PROXY_SECRET"
+    | "LOCAL_COUNTRY_CODE"
+  >,
+) {
+  if (config.NODE_ENV === "production") {
+    const supplied = headers[EDGE_SECRET_HEADER];
+    const candidate = Array.isArray(supplied) ? supplied[0] : supplied;
+    if (!candidate) return "ZZ";
+    const actual = Buffer.from(candidate);
+    const expected = Buffer.from(config.EDGE_PROXY_SECRET);
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected))
+      return "ZZ";
+  }
+  const value = headers[config.COUNTRY_HEADER_NAME];
+  const candidate = Array.isArray(value) ? value[0] : value;
+  const parsed = countryCodeSchema.safeParse(
+    candidate ??
+      (config.NODE_ENV === "production" ? "ZZ" : config.LOCAL_COUNTRY_CODE),
+  );
+  return parsed.success ? parsed.data : "ZZ";
+}
+
 export function createApp(options: CreateAppOptions = {}) {
   const config = options.config ?? parseServerConfig(process.env);
   const app = Fastify({ logger: { level: config.LOG_LEVEL } });
@@ -207,15 +237,8 @@ export function createApp(options: CreateAppOptions = {}) {
         config.SUPABASE_SERVICE_ROLE_KEY,
       ),
     );
-  const countryFromRequest = (request: FastifyRequest) => {
-    const value = request.headers[config.COUNTRY_HEADER_NAME];
-    const candidate = Array.isArray(value) ? value[0] : value;
-    const parsed = countryCodeSchema.safeParse(
-      candidate ??
-        (config.NODE_ENV === "production" ? "ZZ" : config.LOCAL_COUNTRY_CODE),
-    );
-    return parsed.success ? parsed.data : "ZZ";
-  };
+  const countryFromRequest = (request: FastifyRequest) =>
+    countryCodeFromHeaders(request.headers, config);
   if ("setBlockChecker" in realtime)
     realtime.setBlockChecker((first, second) =>
       blocks.hasEitherDirection(first, second),
