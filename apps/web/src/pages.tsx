@@ -69,7 +69,9 @@ export function LandingPage() {
           <div className="hero-actions">
             {availability && !availability.registrationEnabled ? (
               <span className="hero-primary" role="status">
-                Beta is not open in {availability.countryCode} yet
+                {availability.countryCode === "ZZ"
+                  ? "Sign-ups are temporarily unavailable"
+                  : `Beta is not open in ${availability.countryCode} yet`}
               </span>
             ) : (
               <Link className="hero-primary" to="/auth/sign-up">

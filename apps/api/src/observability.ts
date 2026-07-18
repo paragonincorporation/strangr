@@ -34,12 +34,22 @@ export class Observability {
     return Object.fromEntries(this.counters);
   }
   error(error: unknown, context: Record<string, unknown> = {}) {
+    const errorCode =
+      error instanceof Error &&
+      "code" in error &&
+      ["string", "number"].includes(typeof error.code)
+        ? error.code
+        : undefined;
     return {
       event: "application_error",
       ...this.tags,
       error: redactLogValue(
         error instanceof Error
-          ? { name: error.name, message: error.message }
+          ? {
+              name: error.name,
+              message: error.message,
+              ...(errorCode === undefined ? {} : { code: errorCode }),
+            }
           : error,
       ),
       context: redactLogValue(context),

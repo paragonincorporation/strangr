@@ -1,8 +1,12 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { WebApp, createWebMemoryRouter } from "./app.js";
 import { RootErrorBoundary } from "./components/root-error-boundary.js";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("web application shell", () => {
   test("navigates from landing to the auth boundary", async () => {
@@ -15,6 +19,30 @@ describe("web application shell", () => {
       screen.getByRole("link", { name: "Create your account ↗" }),
     );
     expect(await screen.findByLabelText("Confirm password")).toBeVisible();
+  });
+
+  test("does not expose the internal unknown-country code", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            countryCode: "ZZ",
+            registrationEnabled: false,
+            reasonCode: "not_reviewed",
+          }),
+      }),
+    );
+    render(<WebApp router={createWebMemoryRouter(["/"])} />);
+
+    expect(
+      await screen.findByText("Sign-ups are temporarily unavailable"),
+    ).toBeVisible();
+    expect(screen.queryByText(/ZZ/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Create your account ↗" }),
+    ).not.toBeInTheDocument();
   });
 
   test("renders authenticated desktop and mobile navigation boundaries", () => {

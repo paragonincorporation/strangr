@@ -248,20 +248,36 @@ export function createApp(options: CreateAppOptions = {}) {
   let subscriber: Awaited<
     ReturnType<RedisRealtimeStore["subscribeUserEvents"]>
   > | null = null;
+  let realtimeReadyAttempt: Promise<void> | undefined;
+  const ensureRealtimeReady = async () => {
+    if (realtime.client.isOpen && subscriber?.isOpen) return;
+    const attempt =
+      realtimeReadyAttempt ??
+      (async () => {
+        await realtime.connect();
+        if (subscriber?.isOpen) return;
+        subscriber = await realtime.subscribeUserEvents((userId, message) => {
+          for (const [key, socket] of localSockets)
+            if (
+              key.startsWith(`${userId}:`) &&
+              socket.readyState === WebSocket.OPEN
+            ) {
+              socket.send(message);
+              if (message.includes('"type":"capability.revoked"'))
+                socket.close(4003, "Capability revoked");
+            }
+        });
+      })();
+    realtimeReadyAttempt = attempt;
+    try {
+      await attempt;
+    } finally {
+      if (realtimeReadyAttempt === attempt) realtimeReadyAttempt = undefined;
+    }
+  };
   app.addHook("onReady", async () => {
     try {
-      await realtime.connect();
-      subscriber = await realtime.subscribeUserEvents((userId, message) => {
-        for (const [key, socket] of localSockets)
-          if (
-            key.startsWith(`${userId}:`) &&
-            socket.readyState === WebSocket.OPEN
-          ) {
-            socket.send(message);
-            if (message.includes('"type":"capability.revoked"'))
-              socket.close(4003, "Capability revoked");
-          }
-      });
+      await ensureRealtimeReady();
     } catch (cause) {
       app.log.warn(
         { err: cause },
@@ -420,18 +436,33 @@ export function createApp(options: CreateAppOptions = {}) {
         const category = request.url
           .split("?")[0]!
           .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ":id");
-        const [accountLimit, sessionLimit] = await Promise.all([
-          realtime.rateLimit(
-            `http:account:${auth.user.id}:${category}`,
-            30,
-            60,
-          ),
-          realtime.rateLimit(
-            `http:session:${auth.identity.authSessionId}:${category}`,
-            20,
-            60,
-          ),
-        ]);
+        let accountLimit;
+        let sessionLimit;
+        try {
+          [accountLimit, sessionLimit] = await Promise.all([
+            realtime.rateLimit(
+              `http:account:${auth.user.id}:${category}`,
+              30,
+              60,
+            ),
+            realtime.rateLimit(
+              `http:session:${auth.identity.authSessionId}:${category}`,
+              20,
+              60,
+            ),
+          ]);
+        } catch (cause) {
+          request.log.warn({ err: cause }, "rate limit dependency unavailable");
+          return reply
+            .code(503)
+            .send(
+              error(
+                "service_unavailable",
+                "Service is temporarily unavailable",
+                request.id,
+              ),
+            );
+        }
         if (!accountLimit.allowed || !sessionLimit.allowed)
           return reply.code(429).send(
             error(
@@ -877,6 +908,7 @@ export function createApp(options: CreateAppOptions = {}) {
             503,
           );
         try {
+          await ensureRealtimeReady();
           const ticket = await realtime.createTicket(identity, 30, {
             global: config.GLOBAL_CONCURRENCY_CEILING,
             country: countryCeiling,
@@ -892,7 +924,12 @@ export function createApp(options: CreateAppOptions = {}) {
               503,
             );
           }
-          throw cause;
+          req.log.warn({ err: cause }, "realtime dependency unavailable");
+          throw new DomainError(
+            "service_unavailable",
+            "Realtime is temporarily unavailable",
+            503,
+          );
         }
       } catch (cause) {
         return domainReply(reply, req.id, cause);

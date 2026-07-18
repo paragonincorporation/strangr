@@ -95,6 +95,7 @@ export function textSkipCooldown(match: MatchRecord, now = Date.now()) {
 export class RedisRealtimeStore {
   readonly client: RedisClientType;
   private readonly prefix: string;
+  private connectAttempt: Promise<unknown> | undefined;
   private blockChecker:
     ((first: string, second: string) => Promise<boolean>) | undefined;
   constructor(url: string, namespace = "paramingle") {
@@ -117,7 +118,14 @@ export class RedisRealtimeStore {
     return [this.prefix, ...parts].join(":");
   }
   async connect() {
-    if (!this.client.isOpen) await this.client.connect();
+    if (this.client.isOpen) return;
+    const attempt = this.connectAttempt ?? this.client.connect();
+    this.connectAttempt = attempt;
+    try {
+      await attempt;
+    } finally {
+      if (this.connectAttempt === attempt) this.connectAttempt = undefined;
+    }
   }
   async close() {
     if (this.client.isOpen) await this.client.quit();
@@ -321,6 +329,7 @@ export class RedisRealtimeStore {
     await this.client.del(this.key("revoked-user", userId));
   }
   async rateLimit(scope: string, limit: number, windowSeconds: number) {
+    await this.connect();
     const key = this.key("limit", scope);
     const count = await this.client.incr(key);
     if (count === 1) await this.client.expire(key, windowSeconds);
