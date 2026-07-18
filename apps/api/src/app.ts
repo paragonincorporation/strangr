@@ -420,7 +420,30 @@ export function createApp(options: CreateAppOptions = {}) {
             ),
           );
       if (feature) {
-        const restriction = await moderation.restriction(auth.user.id, feature);
+        let restriction;
+        try {
+          restriction = await moderation.restriction(auth.user.id, feature);
+        } catch (cause) {
+          request.log.error(
+            redactLogValue(
+              observability.error(cause, {
+                requestId: request.id,
+                dependency: "postgres",
+                operation: "moderation.restriction",
+              }),
+            ),
+            "moderation dependency unavailable",
+          );
+          return reply
+            .code(503)
+            .send(
+              error(
+                "service_unavailable",
+                "Service is temporarily unavailable",
+                request.id,
+              ),
+            );
+        }
         if (restriction)
           return reply
             .code(403)

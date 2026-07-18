@@ -319,6 +319,7 @@ describe("ratings, safe cards, and reconnect", () => {
       entitlementKey: "matching.reconnect",
       source: "test",
       sourceReference: randomUUID(),
+      validFrom: connected,
     });
     const offer = await engagement.createReconnect(first, id);
     expect(

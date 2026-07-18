@@ -1,4 +1,11 @@
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "vitest";
 import { RedisRealtimeStore } from "../../apps/api/src/realtime.js";
 
 const namespace = `paramingle-test-${process.pid}-${Date.now()}`;
@@ -29,13 +36,17 @@ const criteria = {
 };
 
 beforeAll(() => store.connect());
-afterAll(async () => {
+async function clearNamespace() {
   const keys: string[] = [];
   for await (const batch of store.client.scanIterator({
     MATCH: `${namespace}:*`,
   }))
     keys.push(...batch);
   if (keys.length) await store.client.sendCommand(["DEL", ...keys]);
+}
+beforeEach(clearNamespace);
+afterAll(async () => {
+  await clearNamespace();
   await store.close();
 });
 
@@ -90,9 +101,9 @@ describe("Redis realtime primitives", () => {
   test("shares rate limits and rejects stale match membership", async () => {
     expect((await store.rateLimit("device:a", 1, 10)).allowed).toBe(true);
     expect((await store.rateLimit("device:a", 1, 10)).allowed).toBe(false);
-    expect(await store.acknowledge(crypto.randomUUID(), first.userId)).toBe(
-      false,
-    );
+    expect(
+      await store.acknowledge(crypto.randomUUID(), first.userId),
+    ).toBeNull();
   });
   test("marks a match connected once and extends its active lease", async () => {
     const active = await store.activeMatchBetween(first.userId, second.userId);

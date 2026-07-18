@@ -31,4 +31,25 @@ describe("observability redaction", () => {
       context: {},
     });
   });
+
+  test("keeps nested provider codes from wrapped database errors", () => {
+    const provider = Object.assign(new Error("relation does not exist"), {
+      code: "42P01",
+    });
+    const cause = new Error("Failed query", { cause: provider });
+    expect(new Observability({ environment: "test" }).error(cause)).toEqual({
+      event: "application_error",
+      environment: "test",
+      error: {
+        name: "Error",
+        message: "[REDACTED]",
+        cause: {
+          name: "Error",
+          message: "[REDACTED]",
+          code: "42P01",
+        },
+      },
+      context: {},
+    });
+  });
 });

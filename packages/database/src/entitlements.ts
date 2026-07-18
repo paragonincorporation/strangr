@@ -85,8 +85,16 @@ export class EntitlementService {
       .from(subscriptions)
       .where(eq(subscriptions.userId, userId))
       .limit(1);
+    const subscriptionEntitled = Boolean(
+      subscription &&
+      (subscription.status === "active" ||
+        subscription.status === "trialing" ||
+        (subscription.status === "past_due" &&
+          subscription.paymentGraceUntil &&
+          subscription.paymentGraceUntil > now)),
+    );
     return {
-      planKey: subscription?.planKey ?? "free",
+      planKey: subscriptionEntitled ? subscription!.planKey : "free",
       subscription: subscription ?? null,
       grants: rows,
     };
